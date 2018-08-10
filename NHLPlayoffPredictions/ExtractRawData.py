@@ -86,12 +86,17 @@ def ExtractSeasonGames(year, rtableid="games", ptableid="games_playoffs", \
     dfp = ReadHTMLTable(soup, ptableid, url)
 
     # Reformat dataframes
-    dfr.drop(columns=["Unnamed: 5", "Att.","LOG","Notes"], inplace=True)
-    dfp.drop(columns=["Unnamed: 5", "Att.","LOG","Notes"], inplace=True)
+    dfr.drop(columns=["Att.","LOG","Notes"], inplace=True)
+    dfp.drop(columns=["Att.","LOG","Notes"], inplace=True)
     dfr.rename({"Visitor":"Away", "G":"GA", "G.1":"GF"}, axis=1, inplace=True)
     dfp.rename({"Visitor":"Away", "G":"GA", "G.1":"GF"}, axis=1, inplace=True)
+    dfr.rename({"Unnamed: 5": "Decision"}, axis=1, inplace=True)
+    dfp.rename({"Unnamed: 5": "Decision"}, axis=1, inplace=True)
     dfr = dfr.assign(Season=0)
     dfp = dfp.assign(Season=1)
+    dfr.fillna({"Decision": "REG"}, inplace=True)
+    dfp.fillna({"Decision": "REG"}, inplace=True)
+    assert len(dfr.Decision.unique()) <= 3 # Consistency check
 
     # Concatenate two dataframes to make single season data frame
     df = pd.concat([dfr,dfp], ignore_index=True)
@@ -261,15 +266,20 @@ def FindGameIndex(df, date, ateam, hteam, agoal, hgoal, url):
     """
 
     # Find index corresponding to given game details
-    index = df.loc[(df.Date == date) & (df.Away == TeamFMT(ateam)) & (df.Home == TeamFMT(hteam)) & (df.GA == agoal) & (df.GF == hgoal)]
+    index = df.loc[(df.Date == date) & (df.Away == TeamFMT(ateam)) & (df.Home == TeamFMT(hteam))]
     if index.shape[0] != 1:
-        # Try using just date and goal information since some urls are missing team information
+        # Try using date and goal information since some urls are missing team information
         index = df.loc[(df.Date == date) & (df.GA == agoal) & (df.GF == hgoal)]
         if index.shape[0] != 1:
             print("WARNING: Could not map game date:", date, "ateam:", ateam, "hteam:", hteam, "agoal:", agoal, "hgoal:", hgoal, "url:", url)
             return -1
 
-    return index.index.values.astype(int)[0]
+    # Consistency check on the final score
+    index = index.index.values.astype(int)[0]
+    if df.loc[index,"GA"] != agoal or df.loc[index,"GF"] != hgoal:
+        print("WARNING: Inconsistent final score GF:", df.loc[index,"GF"], hgoal, "GA:", df.loc[index,"GA"], agoal, "url: ", url)
+
+    return index 
 
 def FindSeriesIndices(df, team1, team2): 
     """
@@ -379,7 +389,7 @@ def PrintSummaryStatistics(df, stats, sl=40, sufst="_5v5", sufsa="_SVA", sufpp="
     PrintFMT("Total number of regular season games", (nregs,))
     PrintFMT("Regular season games with missing data", (nregs_na,))
     nplays = df.loc[df.Season > 0].shape[0]
-    nplays_na = nplays - df.dropna().loc[df.Season == 1].shape[0]
+    nplays_na = nplays - df.dropna().loc[df.Season > 0].shape[0]
     PrintFMT("Total number of playoff games", (nplays,))
     PrintFMT("Playoff games with missing data", (nplays_na,))
 
@@ -395,7 +405,7 @@ def SaveData(df, ddir, dtemp, year):
     """
 
     ofile = ddir + dtemp.replace("YEAR_REPLACE", str(year))
-    df.to_csv(ofile, sep="\t")
+    df.to_csv(ofile, na_rep="NA", sep="\t")
     print("Data saved to " + ofile)
 
 # -------------------------------------------------------------------------------------------------------
