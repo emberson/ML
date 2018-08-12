@@ -20,11 +20,6 @@ seasons = np.arange(2008, 2018+1)
 # Definitions can be found at http://naturalstattrick.com/glossary.php?teams
 shotstats = np.array(["CF", "CA", "FF", "FA", "SF", "SA", "SCF", "SCA", "HDCF", "HDCA", "GF", "GA"])
 
-# Derived statistics: balanced schedule winning percentage, PDO, goalie save percentage at even strength
-# Put everything in averages (over all season or teams matchups)
-# Rolling corsi, fenwick, and pdo
-# Rolling goalie statistics to better removie injuries etc
-
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS 
 # -------------------------------------------------------------------------------------------------------
@@ -146,7 +141,7 @@ def ExtractShotStatistics(df, stats, year, rind0=20001, sufst="_5v5", sufsa="_SV
     # Keep list of games where data was successfully extracted 
     #
 
-    found = np.zeros(df.shape[0], dtype="bool")
+    df = df.assign(found=0)
 
     #
     # Start with regular season games
@@ -174,7 +169,7 @@ def ExtractShotStatistics(df, stats, year, rind0=20001, sufst="_5v5", sufsa="_SV
             df, flagged = ParseNaturalStatTrickTables(df, soup, url, gindex, stats, sufst, sufsa, sufpp, sufpk)
 
             if flagged: print("WARNING: Some data was missing in url:", url) 
-            else: found[gindex] = True
+            else: df.loc[gindex,"found"] = 1
 
         ProgressBar(i, nreg)
 
@@ -212,7 +207,7 @@ def ExtractShotStatistics(df, stats, year, rind0=20001, sufst="_5v5", sufsa="_SV
                 assert df.loc[gindex,"Season"] == i+1
                 df, flagged = ParseNaturalStatTrickTables(df, soup, url, gindex, stats, sufst, sufsa, sufpp, sufpk)
                 if flagged: print("WARNING: Some data was missing in url:", url)
-                else: found[gindex] = True
+                else: df.loc[gindex,"found"] = 1
             ProgressBar(np0, npgames) 
             np0 += 1
 
@@ -223,7 +218,7 @@ def ExtractShotStatistics(df, stats, year, rind0=20001, sufst="_5v5", sufsa="_SV
     # Fill any missing games with null values
     #
 
-    inds = np.where(found==False)[0]
+    inds = df.loc[(df.found == 0)].index.values.astype(int)
     for i in range(inds.shape[0]):
         gindex = inds[i]
         for j in range(stats.shape[0]):
@@ -233,6 +228,8 @@ def ExtractShotStatistics(df, stats, year, rind0=20001, sufst="_5v5", sufsa="_SV
             df.loc[gindex,statsa] = np.nan
             df.loc[gindex,statpp] = np.nan
             df.loc[gindex,statpk] = np.nan
+
+    df.drop(columns=["found"], inplace=True)
 
     return df
 
