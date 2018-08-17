@@ -438,6 +438,18 @@ def GeneratePlayoffSeriesFeatures(dg, ds, N):
             goalsfs_mt[i]  = CompareGoals(gfs1, gfs2)
             goalsas_mt[i]  = CompareGoals(gas1, gas2)
             pdoss_mt[i]    = ComparePDOs(pdos1, pdos2)
+        else:
+            points_mt[i]   = np.nan
+            goalsf_mt[i]   = np.nan
+            goalsa_mt[i]   = np.nan
+            pdos_mt[i]     = np.nan
+            corsif_mt[i]   = np.nan
+            corsia_mt[i]   = np.nan
+            fenwickf_mt[i] = np.nan
+            fenwicka_mt[i] = np.nan
+            goalsfs_mt[i]  = np.nan
+            goalsas_mt[i]  = np.nan
+            pdoss_mt[i]    = np.nan
 
         # Get rolling statistics from the previous N games (can include playoff games)
         dn1 = GatherLastNGames(dg, team1i, datei, N)
