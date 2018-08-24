@@ -476,13 +476,14 @@ def GeneratePlayoffSeriesFeatures(dg, ds, N):
     #
 
     dp = pd.DataFrame.from_dict({"Team1":team1})
-    dp = dp.assign(Team2=team2, Round=pround, Home=home, Result=result, 
-                   PP=points, BB=betas, GF=goalsf, GA=goalsa, PDO=pdos, CF=corsif, CA=corsia, \
-                   FF=fenwickf, FA=fenwicka, GFST=goalsfs, GAST=goalsas, PDOST=pdoss, \
-                   Matches=ngames_mt, PP_M=points_mt, GF_M=goalsf_mt, GA_M=goalsa_mt, PDO_M=pdos_mt, CF_M=corsif_mt, CA_M=corsia_mt, \
-                   FF_M=fenwickf_mt, FA_M=fenwicka_mt, GFST_M=goalsfs_mt, GAST_M=goalsas_mt, PDOST_M=pdoss_mt, \
-                   Nlast=ngames_rl, PP_N=points_rl, GF_N=goalsf_rl, GA_N=goalsa_rl, PDO_N=pdos_rl, CF_N=corsif_rl, CA_N=corsia_rl, \
-                   FF_N=fenwickf_rl, FA_N=fenwicka_rl, GFST_N=goalsfs_rl, GAST_N=goalsas_rl, PDOST_N=pdoss_rl)
+    dp = dp.assign(Team2=team2, Round=pround, Home=home, Result=result,
+                   PP=points, BB=betas, GD=goalsf-goalsa, PDO=pdos, CD=corsif-corsia, \
+                   FD=fenwickf-fenwicka, GDST=goalsfs-goalsas, PDOST=pdoss, \
+                   Matches=ngames_mt, PP_M=points_mt, GD_M=goalsf_mt-goalsa_mt, PDO_M=pdos_mt, CD_M=corsif_mt-corsia_mt, \
+                   FD_M=fenwickf_mt-fenwicka_mt, GDST_M=goalsfs_mt-goalsas_mt, PDOST_M=pdoss_mt, \
+                   Nlast=ngames_rl, PP_N=points_rl, GD_N=goalsf_rl-goalsa_rl, PDO_N=pdos_rl, CD_N=corsif_rl-corsia_rl, \
+                   FD_N=fenwickf_rl-fenwicka_rl, GDST_N=goalsfs_rl-goalsas_rl, PDOST_N=pdoss_rl)
+
 
     return dp
 
