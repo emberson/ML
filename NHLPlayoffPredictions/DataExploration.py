@@ -191,6 +191,7 @@ data = PlayoffData(input_root_dir, input_template, seasons)
 
 data.SetSplitSeed(seed_split)
 data.SplitTrainingTestingData(train_fraction)
+
 select = sklearn.feature_selection.SelectKBest(k=data.num_features)
 select_fit = select.fit(data.x_train, data.y_train)
 scores  = select_fit.scores_

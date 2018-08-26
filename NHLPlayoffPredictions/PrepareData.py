@@ -328,7 +328,7 @@ def ComputeSpecialTeamStats(dh, da):
 
     return ngd_pp/nn, ngd_pk/nn, shp_pp, svp_pp
 
-def GeneratePlayoffSeriesFeatures(dg, ds, N):
+def GeneratePlayoffSeriesFeatures(dg, ds, N, year):
     """
     Return dataframe containing features for each playoff series using a combination
     of season stats, regular series match results, and rolling statistics.
@@ -476,7 +476,7 @@ def GeneratePlayoffSeriesFeatures(dg, ds, N):
     #
 
     dp = pd.DataFrame.from_dict({"Team1":team1})
-    dp = dp.assign(Team2=team2, Round=pround, Home=home, Result=result,
+    dp = dp.assign(Team2=team2, Round=pround, Season=year, Home=home, Result=result,
                    PP=points, BB=betas, GD=goalsf-goalsa, PDO=pdos, CD=corsif-corsia, \
                    FD=fenwickf-fenwicka, GDST=goalsfs-goalsas, PDOST=pdoss, \
                    Matches=ngames_mt, PP_M=points_mt, GD_M=goalsf_mt-goalsa_mt, PDO_M=pdos_mt, CD_M=corsif_mt-corsia_mt, \
@@ -687,7 +687,7 @@ for season in seasons:
     ds = ComputeSeasonTeamStats(dg)
 
     # Create dataframe containing stats for each playoff series 
-    dp = GeneratePlayoffSeriesFeatures(dg, ds, Nrolling)
+    dp = GeneratePlayoffSeriesFeatures(dg, ds, Nrolling, season)
 
     # Print summary to screen
     PrintInfo(dp)

@@ -32,7 +32,7 @@ seed_split     = 92
 
 # Kfold parameters
 seed_kfold   = 78
-nsplit_kfold = 3
+nsplit_kfold = 5
 
 # Various plots
 plot_dir = "plots/LogisticRegression/"
@@ -175,7 +175,7 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 #
 
 data = PlayoffData(input_root_dir, input_template, seasons)
-data.DropFeatures(["Home", "PP", "CD", "CD_N", "CD_M", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
+#data.DropFeatures(["Home", "PP", "CD", "CD_N", "CD_M"]) #, "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
 
 #
 # Compute information value for each feature

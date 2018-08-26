@@ -13,7 +13,7 @@ class PlayoffData:
     target_column = "Result"
 
     # Columns containing playoff metadata which will be stored in a separate dataframe
-    meta_columns = ["Team1", "Team2", "Round", "Matches", "Nlast"]
+    meta_columns = ["Team1", "Team2", "Round", "Season", "Matches", "Nlast"]
 
     # Value to initialize for random seeds
     seed_initial = 135792468
