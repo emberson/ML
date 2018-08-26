@@ -600,15 +600,14 @@ def CompareBetas(x, y):
     """
 
     pij = np.exp(x-y)/(1.0+np.exp(x-y))
-
     return pij
+#    return Difference(x, y)
 
 def CompareGoals(x, y):
     """
     Return feature that compares goals between two teams.
     """
 
-#    return Ratio(x, y)
     return Difference(x, y)
 
 def ComparePDOs(x, y):
@@ -623,7 +622,6 @@ def CompareShots(x, y):
     Return feature that compares shots between two teams.
     """
 
-#    return Ratio(x, y)
     return Difference(x, y)
 
 def GetSeasonMatchups(dg, t1, t2, S=0):

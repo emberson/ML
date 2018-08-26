@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import Imputer
 from sklearn.model_selection import train_test_split
 
 class PlayoffData:
@@ -68,10 +69,12 @@ class PlayoffData:
     
     def HandleMissingValues(self):
         """
-        Fill any missing values with zeros which indicate no difference between the teams.
+        Fill any missing values with mean of that column. 
         """
 
-        self.features.fillna(0, inplace=True)
+        imp = Imputer(missing_values="NaN", strategy="mean", axis=0)
+        imp.fit(self.features)
+        self.features = pd.DataFrame(data=imp.transform(self.features), columns=self.features.columns)
 
     def FeatureScaling(self):
         """
@@ -140,12 +143,21 @@ class PlayoffData:
                   str(self.scaling[column]["mean"]).ljust(sl) + str(self.scaling[column]["std"]).ljust(sl))
         print("-"*slt)
 
+    def KeepFeatures(self, columns):
+        """
+        Drop all but the selected features.
+        """
+
+        self.features = self.features[columns]
+        self.num_features = self.features.shape[1]
+
     def DropFeatures(self, columns):
         """
         Drop features from consideration.
         """
 
         self.features.drop(columns=columns, inplace=True)
+        self.num_features = self.features.shape[1]
 
     def SetSplitSeed(self, seed):
         """

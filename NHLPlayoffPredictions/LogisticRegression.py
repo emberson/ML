@@ -36,84 +36,12 @@ nsplit_kfold = 3
 
 # Various plots
 plot_dir = "plots/LogisticRegression/"
-plot_correlation_mat = plot_dir + "correlation_matrix.pdf"
 plot_nfeatures_tverr = plot_dir + "nfeatures_error.pdf" 
 plot_roc_curve       = plot_dir + "roc.pdf"
 
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
 # -------------------------------------------------------------------------------------------------------
-
-def LabelFMT(labs):
-    """
-    Formats labs to be compatible with latex.
-    """
-
-    labs = np.array(labs)
-    for i in range(labs.shape[0]): labs[i] = labs[i].replace("_", "-")
-
-    return labs
-
-def PlotCorrelationMatrix(pf, cmat):
-    """
-    Plots correlation matrix of the feature set.
-    """
-
-    #
-    # Plot parameters
-    #
-
-    # Labels
-    labs = LabelFMT(cmat.columns)
-
-    # Colormap parameters
-    cmap = cm.get_cmap("jet") 
-    cmin = -1.
-    cmax = 1.
-    cspace = -0.03
-    cwidth = 0.04
-
-    # Plot window
-    left   = 0.14
-    right  = 0.86
-    dw     = 1.0-(right-left)
-    bottom = dw/2
-    top    = 1 - dw/2
-
-    #
-    # Make the plot
-    #
-
-    fig_width_pt  = 400.
-    inches_per_pt = 1. / 72.27
-    fig_width     = fig_width_pt * inches_per_pt
-    fig_height    = fig_width * 0.85
-    fig_size      = [fig_width, fig_height]
-    params        = {'backend': 'ps', 'axes.labelsize': 13, 'font.size': 12, \
-                    'legend.fontsize': 12, 'xtick.labelsize': 12, 'ytick.labelsize': 12, \
-                    'text.usetex': True, 'figure.figsize': fig_size}
-
-    py.rcParams.update(params)
-    fig = py.figure(1)
-    py.clf()
-    py.subplots_adjust(left=left, right=right, bottom=bottom, top=top, hspace=0., wspace=0.)
-
-    ax1 = py.subplot(111)
-
-    py.imshow(cmat, cmap=cmap, vmin=cmin, vmax=cmax, interpolation="nearest")
-
-    bbox  = np.array(py.gca().get_position())
-    cax  = fig.add_axes([bbox[1][0]+cspace, bbox[0][1], cwidth, bbox[1][1]-bbox[0][1]]) # (left xpos, bottom ypos, width, height) 
-    cbar = py.colorbar(cax=cax)
-    cbar.solids.set_edgecolor("face")
-
-    ax1.set_xticks(np.arange(cmat.shape[0])) ; ax1.set_xticklabels(labs, rotation="vertical")
-    ax1.set_yticks(np.arange(cmat.shape[0])) ; ax1.set_yticklabels(labs)#, rotation="vertical")
-
-    py.savefig(pf)
-    py.close()
-
-    print("Correlation matrix plot saved to " + pf)
 
 def PlotError(pf, tacc, vacc):
     """
@@ -247,13 +175,7 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 #
 
 data = PlayoffData(input_root_dir, input_template, seasons)
-#data.DropFeatures(["Home", "BB", "CD", "CD_M", "CD_N", "GD", "GD_N", "GD_M", "GDST", "GDST_M", "GDST_N"]) 
-
-#
-# Plot correlation matrix of the feature set
-#
-
-PlotCorrelationMatrix(plot_correlation_mat, data.features.corr())
+data.DropFeatures(["Home", "PP", "CD", "CD_N", "CD_M", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
 
 #
 # Compute information value for each feature
