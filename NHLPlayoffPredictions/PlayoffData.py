@@ -194,4 +194,10 @@ class PlayoffData:
         self.x_train = self.x_train_full[features]
         self.x_test  = self.x_test_full[features]
 
+    def GrabMetaData(self, samples):
+        """
+        Returns metadata for each of the samples in sample.
+        """
+
+        return self.metadata.iloc[samples.index.tolist()]
 

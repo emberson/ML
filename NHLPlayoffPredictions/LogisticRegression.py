@@ -13,8 +13,6 @@ import statsmodels.api as sm
 from PlayoffData import PlayoffData
 import os
 
-# https://towardsdatascience.com/building-a-logistic-regression-in-python-step-by-step-becd4d56c9c8
-
 # -------------------------------------------------------------------------------------------------------
 # PARAMETERS
 # -------------------------------------------------------------------------------------------------------
@@ -37,15 +35,66 @@ nsplit_kfold = 5
 # Various plots
 plot_dir = "plots/LogisticRegression/"
 plot_nfeatures_tverr = plot_dir + "nfeatures_error.pdf" 
+plot_reg_tverr       = plot_dir + "regularization_error.pdf" 
 plot_roc_curve       = plot_dir + "roc.pdf"
+plot_feature_summary = plot_dir + "feature-F1-F2.pdf"
 
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
 # -------------------------------------------------------------------------------------------------------
 
-def PlotError(pf, tacc, vacc):
+def PrintConfusionMatrix(cmat, sh=50, sl=15):
     """
-    Make a plot comparing the training and validation error as a function of the feature set size.
+    Print confusion matrix to screen along with details of incorrectly classified data (if desired). 
+    """
+
+    # Print the confusion matrix to screen
+    tn, fp, fn, tp = cmat.ravel()
+    print(sh*"-")
+    print("Model Summary".upper())
+    print(sh*"-")
+    print(("TP = "+str(tp)).ljust(sl) + ("FP = "+str(fp)).ljust(sl))
+    print(("FN = "+str(fn)).ljust(sl) + ("TN = "+str(tn)).ljust(sl))
+    precision = tp/(1.*(tp+fp))
+    recall    = tp/(1.*(tp+fn))
+    f1        = 2*precision*recall/(precision+recall)
+    print("P   : {:.2f}".format(precision))
+    print("R   : {:.2f}".format(recall))
+    print("F1  : {:.2f}".format(f1))
+    print(sh*"-")
+
+def PrintErrorSummary(m0, x0, y0, yp, sh=50):
+    """
+    Print false positives and false negatives to screen.
+    """
+
+    print(sh*"=")
+    print("FALSE POSITIVES".center(sh))
+    ip = np.where((y0 == 0) & (yp == 1))
+    mp = m0.iloc[ip]
+    fp = x0.iloc[ip]
+    print(pd.concat([mp,fp], axis=1))
+    print(sh*"=")
+    print("FALSE NEGATIVES".center(sh))
+    jn = np.where((y0 == 1) & (yp == 0))
+    mn = m0.iloc[jn]
+    fn = x0.iloc[jn]
+    print(pd.concat([mn,fn], axis=1))
+    print(sh*"=")
+
+def LabelFMT(labs):
+    """
+    Formats labs to be compatible with latex.
+    """
+
+    labs = np.array(labs)
+    for i in range(labs.shape[0]): labs[i] = labs[i].replace("_", "-")
+
+    return labs
+
+def PlotFeatureSummary(pf, x0, c1, c2, y0, yp):
+    """
+    Make a plot showing where in feature space false positives and false negatives occurred.
     """
 
     #
@@ -53,13 +102,11 @@ def PlotError(pf, tacc, vacc):
     #
 
     # Labels
-    xlabel = r"$N_{\rm features}$"
-    ylabel = r"${\rm Error}$"
-    tlabel = r"${\rm Training}$"
-    vlabel = r"${\rm Validation}$"
+    xlabel = LabelFMT([c1])[0]
+    ylabel = LabelFMT([c2])[0]
 
     # Plot window
-    left   = 0.11
+    left   = 0.15
     right  = 0.97
     bottom = 0.11
     top    = 0.97
@@ -68,7 +115,15 @@ def PlotError(pf, tacc, vacc):
     # Prepare the data
     #
 
-    nf = np.arange(tacc.shape[0])+1
+    itp = np.where((y0 == 1) & (yp == 1))
+    itn = np.where((y0 == 0) & (yp == 0))
+    ifp = np.where((y0 == 0) & (yp == 1))
+    ifn = np.where((y0 == 1) & (yp == 0))
+
+    xtp = x0[c1].iloc[itp] ; ytp = x0[c2].iloc[itp]
+    xtn = x0[c1].iloc[itn] ; ytn = x0[c2].iloc[itn]
+    xfp = x0[c1].iloc[ifp] ; yfp = x0[c2].iloc[ifp]
+    xfn = x0[c1].iloc[ifn] ; yfn = x0[c2].iloc[ifn]
 
     #
     # Make the plot
@@ -88,8 +143,63 @@ def PlotError(pf, tacc, vacc):
     py.clf()
     py.subplots_adjust(left=left, right=right, bottom=bottom, top=top, hspace=0., wspace=0.)
 
-    py.plot(nf, 1-tacc, "k-", label=tlabel)
-    py.plot(nf, 1-vacc, "r-", label=vlabel)
+    py.plot(xtp, ytp, "go", label="FP")
+    py.plot(xtn, ytn, "ro", label="FP")
+    py.plot(xfp, yfp, "rx", label="FP")
+    py.plot(xfn, yfn, "gx", label="FN")
+
+    py.xlabel(xlabel)
+    py.ylabel(ylabel)
+
+    py.savefig(pf)
+    py.close()
+
+    print("Feature summary plot saved to " + pf)
+
+def PlotError(pf, xx, tacc, vacc, command):
+    """
+    Make a plot comparing the training and validation error as a function of the feature set size.
+    """
+
+    #
+    # Plot paramters
+    #
+
+    # Labels
+    if command == 0:
+        xlabel = r"$N_{\rm features}$"
+    elif command == 1:
+        xlabel = r"${\rm log}_{10}(C)$"
+    ylabel = r"${\rm Error}$"
+    tlabel = r"${\rm Training}$"
+    vlabel = r"${\rm Validation}$"
+
+    # Plot window
+    left   = 0.11
+    right  = 0.97
+    bottom = 0.11
+    top    = 0.97
+
+    #
+    # Make the plot
+    #
+
+    fig_width_pt  = 300.
+    inches_per_pt = 1. / 72.27
+    fig_width     = fig_width_pt * inches_per_pt
+    fig_height    = fig_width
+    fig_size      = [fig_width, fig_height]
+    params        = {'backend': 'ps', 'axes.labelsize': 13, 'font.size': 12, \
+                    'legend.fontsize': 12, 'xtick.labelsize': 12, 'ytick.labelsize': 12, \
+                    'text.usetex': True, 'figure.figsize': fig_size}
+
+    py.rcParams.update(params)
+    fig = py.figure(1)
+    py.clf()
+    py.subplots_adjust(left=left, right=right, bottom=bottom, top=top, hspace=0., wspace=0.)
+
+    py.plot(xx, 1-tacc, "k-", label=tlabel)
+    py.plot(xx, 1-vacc, "r-", label=vlabel)
 
     lg = py.legend(loc="best", fancybox=True)
     lg.draw_frame(False)
@@ -235,7 +345,7 @@ for i in range(nfeatures):
 # Make a plot comparing training and validation accuracy as a function of number of retained variables
 #
 
-PlotError(plot_nfeatures_tverr, train_acc, valid_acc)
+PlotError(plot_nfeatures_tverr, np.arange(nfeatures)+1, train_acc, valid_acc, 0)
 
 #
 # Choose the number of features as that which maximizes the validation accuracy
@@ -243,18 +353,51 @@ PlotError(plot_nfeatures_tverr, train_acc, valid_acc)
 
 nf_use   = valid_acc.argmax()+1
 cols_use = data.features.columns[np.where(rank < nf_use)]
-print("Choosing to use " + str(nf_use) + " features")
+print("Choosing nfeatures  : {:d}".format(nf_use))
 print("Training accuracy   : {:.2f}".format(train_acc[nf_use-1]))
 print("Validation accuracy : {:.2f}".format(valid_acc[nf_use-1]))
+data.UseSelectedTrainingTestingFeatures(cols_use)
+
+#
+# Iterate over regularization parameter to find optimal value at this feature size
+#
+
+C_iter      = np.arange(-6, 7) ; nc = C_iter.shape[0]
+train_acc_c = np.zeros(nc, dtype="float64")
+valid_acc_c = np.zeros(nc, dtype="float64")
+
+for i in range(nc):
+
+    # Run logistic regression with chosen C parameter
+    Ci     = np.power(10., C_iter[i])
+    logreg = LogisticRegression(penalty="l2", C=Ci)
+    logreg.fit(data.x_train, data.y_train)
+
+    # Use K-fold cross validation to compute training and validation accuracy 
+    result = model_selection.cross_validate(logreg, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
+    train_acc_c[i] = result["train_score"].mean()
+    valid_acc_c[i] = result["test_score"].mean()
+
+i_use = valid_acc_c.argmax()
+C_use = np.power(10., C_iter[i_use])
+print("Choosing C          : {:.2f}".format(C_use))
+print("Training accuracy   : {:.2f}".format(train_acc_c[i_use]))
+print("Validation accuracy : {:.2f}".format(valid_acc_c[i_use]))
+
+#
+# Make a plot comparing training and validation accuracy as a function of C
+#
+
+PlotError(plot_reg_tverr, C_iter, train_acc_c, valid_acc_c, 1)
 
 #
 # Evaluate test accuracy 
 #
 
-data.UseSelectedTrainingTestingFeatures(cols_use)
+logreg = LogisticRegression(penalty="l2", C=C_use)
 logreg.fit(data.x_train, data.y_train)
 result = model_selection.cross_validate(logreg, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
-print('Accuracy of logistic regression classifier on test set: {:.2f}'.format(logreg.score(data.x_test, data.y_test)))
+print("Test accuracy       : {:.2f}".format(logreg.score(data.x_test, data.y_test)))
 
 #
 # Plot ROC curve
@@ -263,6 +406,7 @@ print('Accuracy of logistic regression classifier on test set: {:.2f}'.format(lo
 fpr, tpr, eps = roc_curve(data.y_test, logreg.predict_proba(data.x_test)[:,1])
 auc = roc_auc_score(data.y_test, logreg.predict(data.x_test))
 PlotROCCurve(plot_roc_curve, fpr, tpr, auc)
+print("C-statistic         : {:.2f}".format(auc))
 
 #
 # Print confusion matrix for prediciton
@@ -270,15 +414,27 @@ PlotROCCurve(plot_roc_curve, fpr, tpr, auc)
 
 y_pred = logreg.predict(data.x_test)
 confusion_matrix = confusion_matrix(data.y_test, y_pred)
-print(confusion_matrix)
-print(classification_report(data.y_test, y_pred))
-print("\nC-statistic:",round(auc,4))
+PrintConfusionMatrix(confusion_matrix)
+
+#
+# Print information regarding misclassified samples and make plots showing where errors appear in feature space
+#
+
+metadata = data.GrabMetaData(data.x_test)
+PrintErrorSummary(metadata, data.x_test, data.y_test, y_pred)
+for i in range(cols_use.shape[0]):
+    plot_file_1 = plot_feature_summary.replace("F1", str(cols_use[i]))
+    for j in range(i+1, cols_use.shape[0]):
+        plot_file = plot_file_1.replace("F2", str(cols_use[j])) 
+        PlotFeatureSummary(plot_file, data.x_test, cols_use[i], cols_use[j], data.y_test, y_pred)
 
 #
 # Compute VIF for each feature 
 #
 
-print("Variance Inflation Factor")
+print(50*"-")
+print("Variance Inflation Factors".upper())
+print(50*"-")
 cnames = data.x_train.columns
 for i in np.arange(0,len(cnames)):
     xvars = list(cnames)
@@ -286,5 +442,6 @@ for i in np.arange(0,len(cnames)):
     mod = sm.OLS(data.x_train[yvar], sm.add_constant(data.x_train[xvars]))
     res = mod.fit()
     vif = 1/(1-res.rsquared)
-    print (yvar,round(vif,3))
+    print(str(yvar).ljust(20) +str(vif).ljust(20))
 
+print(50*"-")
