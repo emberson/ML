@@ -24,13 +24,20 @@ input_template = "seriesYEAR_REPLACE.dat"
 # NHL seasons to aggregate data from 
 seasons = np.arange(2008, 2018+1)
 
+# Flag to split training, validation, and testing data by season
+USE_SEASON_SPLIT = True
+nseasons_test    = 3
+
 # Training split fraction and seed
 train_fraction = 0.7
-seed_split     = 92
+seed_split     = 3141592
 
 # Kfold parameters
-seed_kfold   = 78
+seed_kfold   = 2718281
 nsplit_kfold = 5
+
+# Logistic regression parameters
+penalty = "l1"
 
 # Various plots
 plot_dir = "plots/LogisticRegression/"
@@ -38,6 +45,9 @@ plot_nfeatures_tverr = plot_dir + "nfeatures_error.pdf"
 plot_reg_tverr       = plot_dir + "regularization_error.pdf" 
 plot_roc_curve       = plot_dir + "roc.pdf"
 plot_feature_summary = plot_dir + "feature-F1-F2.pdf"
+
+# Some flags
+PLOT_FEATURE_SUMMARY = False
 
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
@@ -284,8 +294,7 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 # Gather playoff data over all seasons
 #
 
-data = PlayoffData(input_root_dir, input_template, seasons)
-#data.DropFeatures(["Home", "PP", "CD", "CD_N", "CD_M"]) #, "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
+data = PlayoffData(input_root_dir, input_template, seasons, seed_split, train_fraction, USE_SEASON_SPLIT, nseasons_test)
 
 #
 # Compute information value for each feature
@@ -293,18 +302,11 @@ data = PlayoffData(input_root_dir, input_template, seasons)
 
 data.ComputeInformationValue()
 
-# 
-# Split data between training and testing samples
-#
-
-data.SetSplitSeed(seed_split)
-data.SplitTrainingTestingData(train_fraction)
-
 #
 # Use recursive feature elimination to rank the importance of the variables
 #
 
-logreg = LogisticRegression(penalty="l2", C=1)
+logreg = LogisticRegression(penalty=penalty, C=1)
 rfe = RFE(logreg, 1)
 rfe = rfe.fit(data.x_train, data.y_train)
 rank = rfe.ranking_ - 1
@@ -324,8 +326,13 @@ print(50*"-")
 nfeatures = data.num_features
 train_acc = np.zeros(nfeatures, dtype="float64")
 valid_acc = np.zeros(nfeatures, dtype="float64")
+train_std = np.zeros(nfeatures, dtype="float64")
+valid_std = np.zeros(nfeatures, dtype="float64")
 
-kfold = model_selection.KFold(n_splits=nsplit_kfold, random_state=seed_kfold)
+if USE_SEASON_SPLIT:
+    kfold = model_selection.KFold(n_splits=data.num_seasons_train, shuffle=False)
+else:
+    kfold = model_selection.KFold(n_splits=nsplit_kfold, random_state=seed_kfold)
 
 for i in range(nfeatures):
 
@@ -340,6 +347,16 @@ for i in range(nfeatures):
     result = model_selection.cross_validate(logreg, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
     train_acc[i] = result["train_score"].mean()
     valid_acc[i] = result["test_score"].mean()
+    train_std[i] = result["train_score"].std()
+    valid_std[i] = result["test_score"].std()
+
+    print(i)
+    print("shape : ", data.x_train.shape[0], data.x_test.shape[0])
+    print("train : ", train_acc[i], train_std[i]) 
+    print("valid : ", valid_acc[i], valid_std[i]) 
+    print("test  : ", logreg.score(data.x_test, data.y_test))
+    print("dist  : ", (logreg.score(data.x_test, data.y_test)-valid_acc[i])/valid_std[i])
+    print()
 
 #
 # Make a plot comparing training and validation accuracy as a function of number of retained variables
@@ -347,15 +364,18 @@ for i in range(nfeatures):
 
 PlotError(plot_nfeatures_tverr, np.arange(nfeatures)+1, train_acc, valid_acc, 0)
 
+exit()
+
 #
 # Choose the number of features as that which maximizes the validation accuracy
 #
 
-nf_use   = valid_acc.argmax()+1
-cols_use = data.features.columns[np.where(rank < nf_use)]
+valid_lw5  = valid_acc - 2*valid_std
+nf_use     = valid_lw5.argmax()+1
+cols_use   = data.features.columns[np.where(rank < nf_use)]
 print("Choosing nfeatures  : {:d}".format(nf_use))
-print("Training accuracy   : {:.2f}".format(train_acc[nf_use-1]))
-print("Validation accuracy : {:.2f}".format(valid_acc[nf_use-1]))
+print("Training accuracy   : {:.2f} +/- {:.2f}".format(train_acc[nf_use-1], train_std[nf_use-1]))
+print("Validation accuracy : {:.2f} +/- {:.2f}".format(valid_acc[nf_use-1], valid_std[nf_use-1]))
 data.UseSelectedTrainingTestingFeatures(cols_use)
 
 #
@@ -365,24 +385,29 @@ data.UseSelectedTrainingTestingFeatures(cols_use)
 C_iter      = np.arange(-6, 7) ; nc = C_iter.shape[0]
 train_acc_c = np.zeros(nc, dtype="float64")
 valid_acc_c = np.zeros(nc, dtype="float64")
+train_std_c = np.zeros(nc, dtype="float64")
+valid_std_c = np.zeros(nc, dtype="float64")
 
 for i in range(nc):
 
     # Run logistic regression with chosen C parameter
     Ci     = np.power(10., C_iter[i])
-    logreg = LogisticRegression(penalty="l2", C=Ci)
+    logreg = LogisticRegression(penalty=penalty, C=Ci)
     logreg.fit(data.x_train, data.y_train)
 
     # Use K-fold cross validation to compute training and validation accuracy 
     result = model_selection.cross_validate(logreg, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
     train_acc_c[i] = result["train_score"].mean()
     valid_acc_c[i] = result["test_score"].mean()
+    train_std_c[i] = result["train_score"].std()
+    valid_std_c[i] = result["test_score"].std()
 
-i_use = valid_acc_c.argmax()
-C_use = np.power(10., C_iter[i_use])
+valid_lw5  = valid_acc_c - 2*valid_std_c
+i_use      = valid_acc_c.argmax()
+C_use      = np.power(10., C_iter[i_use])
 print("Choosing C          : {:.2f}".format(C_use))
-print("Training accuracy   : {:.2f}".format(train_acc_c[i_use]))
-print("Validation accuracy : {:.2f}".format(valid_acc_c[i_use]))
+print("Training accuracy   : {:.2f} +/- {:.2f}".format(train_acc_c[i_use], train_std_c[i_use]))
+print("Validation accuracy : {:.2f} +/- {:.2f}".format(valid_acc_c[i_use], valid_std_c[i_use]))
 
 #
 # Make a plot comparing training and validation accuracy as a function of C
@@ -394,9 +419,8 @@ PlotError(plot_reg_tverr, C_iter, train_acc_c, valid_acc_c, 1)
 # Evaluate test accuracy 
 #
 
-logreg = LogisticRegression(penalty="l2", C=C_use)
+logreg = LogisticRegression(penalty=penalty, C=C_use)
 logreg.fit(data.x_train, data.y_train)
-result = model_selection.cross_validate(logreg, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
 print("Test accuracy       : {:.2f}".format(logreg.score(data.x_test, data.y_test)))
 
 #
@@ -422,11 +446,12 @@ PrintConfusionMatrix(confusion_matrix)
 
 metadata = data.GrabMetaData(data.x_test)
 PrintErrorSummary(metadata, data.x_test, data.y_test, y_pred)
-for i in range(cols_use.shape[0]):
-    plot_file_1 = plot_feature_summary.replace("F1", str(cols_use[i]))
-    for j in range(i+1, cols_use.shape[0]):
-        plot_file = plot_file_1.replace("F2", str(cols_use[j])) 
-        PlotFeatureSummary(plot_file, data.x_test, cols_use[i], cols_use[j], data.y_test, y_pred)
+if PLOT_FEATURE_SUMMARY:
+    for i in range(cols_use.shape[0]):
+        plot_file_1 = plot_feature_summary.replace("F1", str(cols_use[i]))
+        for j in range(i+1, cols_use.shape[0]):
+            plot_file = plot_file_1.replace("F2", str(cols_use[j])) 
+            PlotFeatureSummary(plot_file, data.x_test, cols_use[i], cols_use[j], data.y_test, y_pred)
 
 #
 # Compute VIF for each feature 

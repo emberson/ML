@@ -15,10 +15,13 @@ class PlayoffData:
     # Columns containing playoff metadata which will be stored in a separate dataframe
     meta_columns = ["Team1", "Team2", "Round", "Season", "Matches", "Nlast"]
 
-    # Value to initialize for random seeds
-    seed_initial = 135792468
+    # Default training-testing split seed 
+    seed_default = 135792468
 
-    def __init__(self, data_root_dir, template_file_name, seasons):
+    # Default training split fraction
+    train_fraction_default = 0.7
+
+    def __init__(self, data_root_dir, template_file_name, seasons, seed_split=None, train_fraction=None, SeasonSplit=False, nSeasonTest=0):
         """
         Instantiate class by constructing the dataframes that hold each component of
         the playoff data (metadata, features, target, scaling)
@@ -35,15 +38,23 @@ class PlayoffData:
         # Handle missing values
         self.HandleMissingValues()
 
-        # Perform feature scaling
-        self.FeatureScaling()
+        # Initialize training-testing split seed and fraction
+        if seed_split is None: self.seed_split = self.seed_default
+        else: self.seed_split = seed_split
+        if train_fraction is None: self.train_fraction = self.train_fraction_default
+        else: self.train_fraction = train_fraction
+        self.season_split = SeasonSplit
+        self.nseason_test = nSeasonTest
+
+        # Perform training-testing split
+        self.SplitTrainingTestingData()
+
+        # Perform feature scaling based on training features
+#        self.FeatureScaling()
 
         # Store useful information
         self.num_samples  = self.features.shape[0]
         self.num_features = self.features.shape[1]
-
-        # Initialize random seeds which can be adjusted manually
-        self.seed_split = self.seed_initial
 
     def GatherAllData(self, ddir, dfile, seasons):
         """
@@ -78,7 +89,7 @@ class PlayoffData:
 
     def FeatureScaling(self):
         """
-        Normalize all floating point data to have zero mean and unit variance.
+        Normalize all floating point data to have zero mean and unit variance (based on the training set).
         Store original summary statistics (min, max, mean, variance) of the unscaled data in
         a dataframe.
         """
@@ -87,8 +98,11 @@ class PlayoffData:
 
         for column in self.features: 
 
+            # Don't do this for categorical data
+            if column == "Home": continue 
+
             # Get summary stats
-            x = self.features[column]
+            x = self.x_train_full[column]
             xmin  = x.min() 
             xmax  = x.max()
             xmean = x.mean()
@@ -98,12 +112,15 @@ class PlayoffData:
             keys[column] = np.array([xmin, xmax, xmean, xstd])
 
             # Perform feature scaling only on float data
-            if x.dtype == float:
-                self.features[column] = (self.features[column] - xmean)/xstd
+            if self.features[column].dtype == float:
+                self.features[column]     = (self.features[column] - xmean)/xstd
 
         # Construct dataframe containing summary stats of unscaled data
         self.scaling = pd.DataFrame.from_dict(keys)
         self.scaling.rename(index={0:"min", 1:"max", 2:"mean", 3:"std"}, inplace=True)
+
+        # Call this again to propogate normalization changes over to training and testing sets
+        self.SplitTrainingTestingData()
 
     def ComputeInformationValue(self, nbins=5):
         """
@@ -157,6 +174,10 @@ class PlayoffData:
         """
 
         self.features.drop(columns=columns, inplace=True)
+        self.x_train_full.drop(columns=columns, inplace=True)
+        self.x_test_full.drop(columns=columns, inplace=True)
+        self.x_train.drop(columns=columns, inplace=True)
+        self.x_test.drop(columns=columns, inplace=True)
         self.num_features = self.features.shape[1]
 
     def SetSplitSeed(self, seed):
@@ -166,14 +187,35 @@ class PlayoffData:
 
         self.seed_split = seed
 
-    def SplitTrainingTestingData(self, frac_train):
+    def SplitTrainingTestingData(self):
         """
-        Randomly splits the data so that frac_train of it is training and (1-frac_train) is testing.
+        Randomly splits the data so that train_fraction of it is training and (1-train_fraction) is testing.
         """
 
-        # Split data and store in "full" dataframes which contain all feature vectors
-        self.x_train_full, self.x_test_full, self.y_train, self.y_test = \
-            train_test_split(self.features, self.target, test_size=1-frac_train, train_size=frac_train, random_state=self.seed_split)
+        if self.season_split:
+
+            # Last self.nseason_test seasons are used for testing, others are training
+            seasons = np.sort(np.unique(self.metadata.Season.tolist()))
+            seasons_train = seasons[:seasons.shape[0]-self.nseason_test]
+            seasons_test  = seasons[-self.nseason_test:]
+
+            # Pull out the full training set and test set
+            self.x_train_full = self.features.loc[self.metadata.Season.isin(seasons_train)]
+            self.y_train = self.target.loc[self.metadata.Season.isin(seasons_train)]
+            self.x_test_full = self.features.loc[self.metadata.Season.isin(seasons_test)]
+            self.y_test = self.target.loc[self.metadata.Season.isin(seasons_test)]
+
+            # Record how many seasons were used in each set
+            self.num_seasons_train = seasons_train.shape[0]
+            self.num_seasons_test  = seasons_test.shape[0]
+
+        else:
+
+            # Split data and store in "full" dataframes which contain all feature vectors
+            self.x_train_full, self.x_test_full, self.y_train, self.y_test = \
+                train_test_split(self.features, self.target, test_size=1-self.train_fraction, \
+                                 train_size=self.train_fraction, shuffle=True, random_state=self.seed_split)
+#                                 train_size=self.train_fraction, shuffle=True, stratify=self.metadata.Season, random_state=self.seed_split)
 
         # Initialize actual training and testing set to use the full set of features
         self.UseAllTrainingTestingFeatures()
