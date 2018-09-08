@@ -350,14 +350,6 @@ for i in range(nfeatures):
     train_std[i] = result["train_score"].std()
     valid_std[i] = result["test_score"].std()
 
-    print(i)
-    print("shape : ", data.x_train.shape[0], data.x_test.shape[0])
-    print("train : ", train_acc[i], train_std[i]) 
-    print("valid : ", valid_acc[i], valid_std[i]) 
-    print("test  : ", logreg.score(data.x_test, data.y_test))
-    print("dist  : ", (logreg.score(data.x_test, data.y_test)-valid_acc[i])/valid_std[i])
-    print()
-
 #
 # Make a plot comparing training and validation accuracy as a function of number of retained variables
 #
@@ -368,8 +360,9 @@ PlotError(plot_nfeatures_tverr, np.arange(nfeatures)+1, train_acc, valid_acc, 0)
 # Choose the number of features as that which maximizes the validation accuracy
 #
 
-valid_lw5  = valid_acc - 2*valid_std
-nf_use     = valid_lw5.argmax()+1
+#valid_lw5  = valid_acc - 2*valid_std
+#nf_use     = valid_lw5.argmax()+1
+nf_use     = valid_acc.argmax()+1
 cols_use   = data.features.columns[np.where(rank < nf_use)]
 print("Choosing nfeatures  : {:d}".format(nf_use))
 print("Training accuracy   : {:.2f} +/- {:.2f}".format(train_acc[nf_use-1], train_std[nf_use-1]))
@@ -396,7 +389,7 @@ print("Validation accuracy : {:.2f} +/- {:.2f}".format(clf.cv_results_["mean_tes
 # Make a plot comparing training and validation accuracy as a function of C
 #
 
-PlotError(plot_reg_tverr, C_iter, clf.cv_results_["mean_train_score"], clf.cv_results_["mean_test_score"], 1)
+PlotError(plot_reg_tverr, np.log10(C_iter), clf.cv_results_["mean_train_score"], clf.cv_results_["mean_test_score"], 1)
 
 #
 # Evaluate test accuracy 
