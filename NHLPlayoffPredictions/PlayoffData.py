@@ -50,7 +50,7 @@ class PlayoffData:
         self.SplitTrainingTestingData()
 
         # Perform feature scaling based on training features
-#        self.FeatureScaling()
+        self.FeatureScaling()
 
         # Store useful information
         self.num_samples  = self.features.shape[0]

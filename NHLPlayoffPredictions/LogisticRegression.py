@@ -26,7 +26,7 @@ seasons = np.arange(2008, 2018+1)
 
 # Flag to split training, validation, and testing data by season
 USE_SEASON_SPLIT = True
-nseasons_test    = 3
+nseasons_test    = 2
 
 # Training split fraction and seed
 train_fraction = 0.7
@@ -364,8 +364,6 @@ for i in range(nfeatures):
 
 PlotError(plot_nfeatures_tverr, np.arange(nfeatures)+1, train_acc, valid_acc, 0)
 
-exit()
-
 #
 # Choose the number of features as that which maximizes the validation accuracy
 #
@@ -382,38 +380,23 @@ data.UseSelectedTrainingTestingFeatures(cols_use)
 # Iterate over regularization parameter to find optimal value at this feature size
 #
 
-C_iter      = np.arange(-6, 7) ; nc = C_iter.shape[0]
-train_acc_c = np.zeros(nc, dtype="float64")
-valid_acc_c = np.zeros(nc, dtype="float64")
-train_std_c = np.zeros(nc, dtype="float64")
-valid_std_c = np.zeros(nc, dtype="float64")
+C_iter = np.logspace(-6, 6, 13)
+search_params = {"C": C_iter}
+clf = model_selection.GridSearchCV(logreg, search_params, cv=kfold, scoring="accuracy", return_train_score=True)
+clf.fit(data.x_train, y=data.y_train)
+C_use = clf.best_params_["C"]
 
-for i in range(nc):
-
-    # Run logistic regression with chosen C parameter
-    Ci     = np.power(10., C_iter[i])
-    logreg = LogisticRegression(penalty=penalty, C=Ci)
-    logreg.fit(data.x_train, data.y_train)
-
-    # Use K-fold cross validation to compute training and validation accuracy 
-    result = model_selection.cross_validate(logreg, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
-    train_acc_c[i] = result["train_score"].mean()
-    valid_acc_c[i] = result["test_score"].mean()
-    train_std_c[i] = result["train_score"].std()
-    valid_std_c[i] = result["test_score"].std()
-
-valid_lw5  = valid_acc_c - 2*valid_std_c
-i_use      = valid_acc_c.argmax()
-C_use      = np.power(10., C_iter[i_use])
 print("Choosing C          : {:.2f}".format(C_use))
-print("Training accuracy   : {:.2f} +/- {:.2f}".format(train_acc_c[i_use], train_std_c[i_use]))
-print("Validation accuracy : {:.2f} +/- {:.2f}".format(valid_acc_c[i_use], valid_std_c[i_use]))
+print("Training accuracy   : {:.2f} +/- {:.2f}".format(clf.cv_results_["mean_train_score"][clf.best_index_], \
+                                                       clf.cv_results_["std_train_score"][clf.best_index_]))
+print("Validation accuracy : {:.2f} +/- {:.2f}".format(clf.cv_results_["mean_test_score"][clf.best_index_], \
+                                                       clf.cv_results_["std_test_score"][clf.best_index_]))
 
 #
 # Make a plot comparing training and validation accuracy as a function of C
 #
 
-PlotError(plot_reg_tverr, C_iter, train_acc_c, valid_acc_c, 1)
+PlotError(plot_reg_tverr, C_iter, clf.cv_results_["mean_train_score"], clf.cv_results_["mean_test_score"], 1)
 
 #
 # Evaluate test accuracy 
