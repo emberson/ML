@@ -53,6 +53,19 @@ PLOT_FEATURE_SUMMARY = False
 # FUNCTIONS
 # -------------------------------------------------------------------------------------------------------
 
+def RankIV(cols, IV):
+    """
+    Returns ranking of columns based on information value.
+    """
+
+    ivs = np.zeros(len(cols), dtype="float64")
+    for i in range(len(cols)): ivs[i] = IV[cols[i]]
+    isort = np.argsort(ivs)[::-1]
+    rank = np.zeros(len(cols), dtype="int32")
+    for i in range(len(cols)): rank[i] = np.where(isort == i)[0]
+
+    return rank
+
 def PrintConfusionMatrix(cmat, sh=50, sl=15):
     """
     Print confusion matrix to screen along with details of incorrectly classified data (if desired). 
@@ -375,21 +388,21 @@ data.UseSelectedTrainingTestingFeatures(cols_use)
 
 C_iter = np.logspace(-6, 6, 13)
 search_params = {"C": C_iter}
-clf = model_selection.GridSearchCV(logreg, search_params, cv=kfold, scoring="accuracy", return_train_score=True)
-clf.fit(data.x_train, y=data.y_train)
-C_use = clf.best_params_["C"]
+grid = model_selection.GridSearchCV(logreg, search_params, cv=kfold, scoring="accuracy", return_train_score=True)
+grid.fit(data.x_train, y=data.y_train)
+C_use = grid.best_params_["C"]
 
 print("Choosing C          : {:.2f}".format(C_use))
-print("Training accuracy   : {:.2f} +/- {:.2f}".format(clf.cv_results_["mean_train_score"][clf.best_index_], \
-                                                       clf.cv_results_["std_train_score"][clf.best_index_]))
-print("Validation accuracy : {:.2f} +/- {:.2f}".format(clf.cv_results_["mean_test_score"][clf.best_index_], \
-                                                       clf.cv_results_["std_test_score"][clf.best_index_]))
+print("Training accuracy   : {:.2f} +/- {:.2f}".format(grid.cv_results_["mean_train_score"][grid.best_index_], \
+                                                       grid.cv_results_["std_train_score"][grid.best_index_]))
+print("Validation accuracy : {:.2f} +/- {:.2f}".format(grid.cv_results_["mean_test_score"][grid.best_index_], \
+                                                       grid.cv_results_["std_test_score"][grid.best_index_]))
 
 #
 # Make a plot comparing training and validation accuracy as a function of C
 #
 
-PlotError(plot_reg_tverr, np.log10(C_iter), clf.cv_results_["mean_train_score"], clf.cv_results_["mean_test_score"], 1)
+PlotError(plot_reg_tverr, np.log10(C_iter), grid.cv_results_["mean_train_score"], grid.cv_results_["mean_test_score"], 1)
 
 #
 # Evaluate test accuracy 
