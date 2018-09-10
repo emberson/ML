@@ -358,6 +358,7 @@ def GeneratePlayoffSeriesFeatures(dg, ds, N, year):
     goalsfs  = np.zeros(nseries, dtype="float64")
     goalsas  = np.zeros(nseries, dtype="float64")
     pdoss    = np.zeros(nseries, dtype="float64")
+    pywp     = np.zeros(nseries, dtype="float64")
 
     # Initialize vectors containing regular season matchup stats
     points_mt   = np.zeros(nseries, dtype="float64")
@@ -407,6 +408,9 @@ def GeneratePlayoffSeriesFeatures(dg, ds, N, year):
         # Get global regular season statistics for each team 
         pt1, bt1, gf1, ga1, pdo1, cf1, ca1, ff1, fa1, gfs1, gas1, pdos1 = CollectTeamStats(ds, team1i)
         pt2, bt2, gf2, ga2, pdo2, cf2, ca2, ff2, fa2, gfs2, gas2, pdos2 = CollectTeamStats(ds, team2i)
+        wp1 = PythagoreanWinPercentage(ga1, gf1)
+        wp2 = PythagoreanWinPercentage(ga2, gf2)
+        pywp[i]     = ComparePoints(wp1, wp2)
         points[i]   = ComparePoints(pt1, pt2)
         betas[i]    = CompareBetas(bt1, bt2)
         goalsf[i]   = CompareGoals(gf1, gf2)
@@ -477,7 +481,7 @@ def GeneratePlayoffSeriesFeatures(dg, ds, N, year):
 
     dp = pd.DataFrame.from_dict({"Team1":team1})
     dp = dp.assign(Team2=team2, Round=pround, Season=year, Home=home, Result=result,
-                   PP=points, BB=betas, GD=goalsf-goalsa, PDO=pdos, CD=corsif-corsia, \
+                   PP=points, BB=betas, PWP=pywp, GD=goalsf-goalsa, PDO=pdos, CD=corsif-corsia, \
                    FD=fenwickf-fenwicka, GDST=goalsfs-goalsas, PDOST=pdoss, \
                    Matches=ngames_mt, PP_M=points_mt, GD_M=goalsf_mt-goalsa_mt, PDO_M=pdos_mt, CD_M=corsif_mt-corsia_mt, \
                    FD_M=fenwickf_mt-fenwicka_mt, GDST_M=goalsfs_mt-goalsas_mt, PDOST_M=pdoss_mt, \
@@ -486,6 +490,15 @@ def GeneratePlayoffSeriesFeatures(dg, ds, N, year):
 
 
     return dp
+
+def PythagoreanWinPercentage(ga, gf):
+    """
+    Computes the Pythagorean expected win percentage.
+    """
+
+    wp = 1./(1.+(ga/gf)**2)
+
+    return wp
 
 def PlayoffSeriesMetaData(dp):
     """

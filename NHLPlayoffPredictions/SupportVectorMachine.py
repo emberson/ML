@@ -425,3 +425,21 @@ for i in np.arange(0,len(cnames)):
 
 print(50*"-")
 
+#
+# Show final ranking of importance
+#
+
+if kernel0 == "linear":    
+
+    rfe = RFE(svm, 1)
+    rfe = rfe.fit(data.x_train, data.y_train)
+    rank = rfe.ranking_ - 1 
+        
+    print(50*"-")
+    print("Feature ranking".upper())
+    print(50*"-")
+    cols = np.array(data.x_train.columns.tolist())[np.argsort(rank)]
+    for i in range(rank.shape[0]):
+        print(str(i).ljust(4) + " : " + str(cols[i]).ljust(20) + str(data.IV[cols[i]]).ljust(20))
+    print(50*"-")
+
