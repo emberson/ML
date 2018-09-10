@@ -7,7 +7,7 @@ import pylab as py
 from sklearn import model_selection
 from sklearn.metrics import confusion_matrix,classification_report
 from sklearn.metrics import roc_curve,roc_auc_score
-from sklearn.feature_selection import RFE
+from sklearn.feature_selection import RFE,SelectKBest
 from sklearn.svm import SVC
 from PlayoffData import PlayoffData
 import statsmodels.api as sm
@@ -25,7 +25,7 @@ input_template = "seriesYEAR_REPLACE.dat"
 seasons = np.arange(2008, 2018+1)
 
 # Flag to split training, validation, and testing data by season
-USE_SEASON_SPLIT = True 
+USE_SEASON_SPLIT = False 
 nseasons_test    = 3
 
 # Training split fraction and seed
@@ -37,7 +37,7 @@ seed_kfold   = 2718281
 nsplit_kfold = 5 
 
 # Default parameters for supprot vector classifier
-kernel0 = "rbf"
+kernel0 = "linear"
 gamma0  = 1.0e-2 
 C0      = 1.0
 
@@ -48,8 +48,8 @@ plot_reg_tverr       = plot_dir + "regularization_error.pdf"
 plot_feature_summary = plot_dir + "feature-F1-F2.pdf"
 
 # Some flags
-RANK_BY_IV           = True
-PLOT_FEATURE_SUMMARY = False 
+USE_RFE              = False
+PLOT_FEATURE_SUMMARY = False
 
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
@@ -249,7 +249,6 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 #
 
 data = PlayoffData(input_root_dir, input_template, seasons, seed_split, train_fraction, USE_SEASON_SPLIT, nseasons_test)
-#data.DropFeatures(["Home", "BB", "FD", "FD_N", "FD_M", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
 
 #
 # Compute information value for each feature
@@ -261,18 +260,18 @@ data.ComputeInformationValue()
 # Rank feature importance
 #
 
-if RANK_BY_IV:
-
-    # Use information value to rank 
-    rank = RankIV(data.features.columns.tolist(), data.IV)
-
-else:
-
-    # Use recursive feature selection with linear support vector classifier
+if USE_RFE: # Use recursive feature selection with linear support vector classifier
     svml = SVC(kernel="linear", C=1.0)
     rfe = RFE(svml, 1)
     rfe = rfe.fit(data.x_train, data.y_train)
     rank = rfe.ranking_ - 1
+else:
+    select = SelectKBest(k=data.num_features)
+    select_fit = select.fit(data.x_train, data.y_train)
+    scores  = select_fit.scores_
+    isort = np.argsort(scores)[::-1]
+    rank = np.zeros(data.num_features, dtype="int32")
+    for i in range(data.num_features): rank[i] = np.where(isort == i)[0]
 
 #
 # Print info to screen
@@ -290,7 +289,10 @@ print(50*"-")
 # Setup non-linear support vector classifier to determine number of retained variables
 #
 
-svm = SVC(kernel=kernel0, gamma=gamma0, C=C0)
+if kernel0 == "linear":
+    svm = SVC(kernel=kernel0, C=C0)
+else:
+    svm = SVC(kernel=kernel0, gamma=gamma0, C=C0)
 
 #
 # Compute training and validation accuracy as a function of the number of retained variables
@@ -350,14 +352,17 @@ data.UseSelectedTrainingTestingFeatures(cols_use)
 
 Csearch = np.logspace(-2, 2, 11)
 Gsearch = np.logspace(-4, 4, 21)
-search_params = {"C": Csearch, "gamma": Gsearch}
+if kernel0 == "linear":
+    search_params = {"C": Csearch}
+else:
+    search_params = {"C": Csearch, "gamma": Gsearch}
 grid = model_selection.GridSearchCV(svm, search_params, cv=kfold, scoring="accuracy", return_train_score=True)
 grid.fit(data.x_train, y=data.y_train)
 Copt = grid.best_params_["C"]
-Gopt = grid.best_params_["gamma"]
+if kernel0 == "rbf": Gopt = grid.best_params_["gamma"]
 
 print("Choosing C          : {:.2e}".format(Copt))
-print("Choosing gamma      : {:.2e}".format(Gopt))
+if kernel0 == "rbf": print("Choosing gamma      : {:.2e}".format(Gopt))
 print("Training accuracy   : {:.2f} +/- {:.2f}".format(grid.cv_results_["mean_train_score"][grid.best_index_], \
                                                        grid.cv_results_["std_train_score"][grid.best_index_]))
 print("Validation accuracy : {:.2f} +/- {:.2f}".format(grid.cv_results_["mean_test_score"][grid.best_index_], \
@@ -373,7 +378,11 @@ print("Validation accuracy : {:.2f} +/- {:.2f}".format(grid.cv_results_["mean_te
 # Evaluate test accuracy 
 #
 
-svm = SVC(kernel=kernel0, gamma=Gopt, C=Copt) 
+if kernel0 == "linear":
+    svm = SVC(kernel=kernel0, C=Copt)
+else:
+    svm = SVC(kernel=kernel0, gamma=Gopt, C=Copt)
+
 svm.fit(data.x_train, data.y_train)
 print("Test accuracy       : {:.2f}".format(svm.score(data.x_test, data.y_test)))
 

@@ -589,8 +589,8 @@ def ComparePoints(x, y):
     """
 
 #    return Ratio(x, y) 
-#    return Difference(x, y)
-    return Fraction(x, y)
+    return Difference(x, y)
+#    return Fraction(x, y)
 
 def CompareBetas(x, y):
     """
@@ -599,9 +599,9 @@ def CompareBetas(x, y):
     bias ignored.
     """
 
-    pij = np.exp(x-y)/(1.0+np.exp(x-y))
-    return pij
-#    return Difference(x, y)
+#    pij = np.exp(x-y)/(1.0+np.exp(x-y))
+#    return pij
+    return Difference(x, y)
 
 def CompareGoals(x, y):
     """

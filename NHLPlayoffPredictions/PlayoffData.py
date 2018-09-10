@@ -174,8 +174,8 @@ class PlayoffData:
         """
 
         self.features.drop(columns=columns, inplace=True)
-        self.x_train_full.drop(columns=columns, inplace=True)
-        self.x_test_full.drop(columns=columns, inplace=True)
+        self.x_train_full = self.x_train_full.drop(columns=columns)
+        self.x_test_full = self.x_test_full.drop(columns=columns)
         self.x_train.drop(columns=columns, inplace=True)
         self.x_test.drop(columns=columns, inplace=True)
         self.num_features = self.features.shape[1]

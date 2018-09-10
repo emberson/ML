@@ -7,7 +7,7 @@ import pylab as py
 from sklearn import model_selection
 from sklearn.metrics import confusion_matrix,classification_report
 from sklearn.metrics import roc_curve,roc_auc_score
-from sklearn.feature_selection import RFE
+from sklearn.feature_selection import RFE,SelectKBest
 from sklearn.linear_model import LogisticRegression
 import statsmodels.api as sm
 from PlayoffData import PlayoffData
@@ -25,8 +25,8 @@ input_template = "seriesYEAR_REPLACE.dat"
 seasons = np.arange(2008, 2018+1)
 
 # Flag to split training, validation, and testing data by season
-USE_SEASON_SPLIT = True
-nseasons_test    = 2
+USE_SEASON_SPLIT = False 
+nseasons_test    = 3
 
 # Training split fraction and seed
 train_fraction = 0.7
@@ -34,10 +34,13 @@ seed_split     = 3141592
 
 # Kfold parameters
 seed_kfold   = 2718281
-nsplit_kfold = 5
+nsplit_kfold = 5 
 
 # Logistic regression parameters
 penalty = "l1"
+
+# Flag to use RFE versus K best
+USE_RFE = False
 
 # Various plots
 plot_dir = "plots/LogisticRegression/"
@@ -52,19 +55,6 @@ PLOT_FEATURE_SUMMARY = False
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
 # -------------------------------------------------------------------------------------------------------
-
-def RankIV(cols, IV):
-    """
-    Returns ranking of columns based on information value.
-    """
-
-    ivs = np.zeros(len(cols), dtype="float64")
-    for i in range(len(cols)): ivs[i] = IV[cols[i]]
-    isort = np.argsort(ivs)[::-1]
-    rank = np.zeros(len(cols), dtype="int32")
-    for i in range(len(cols)): rank[i] = np.where(isort == i)[0]
-
-    return rank
 
 def PrintConfusionMatrix(cmat, sh=50, sl=15):
     """
@@ -316,16 +306,24 @@ data = PlayoffData(input_root_dir, input_template, seasons, seed_split, train_fr
 data.ComputeInformationValue()
 
 #
-# Use recursive feature elimination to rank the importance of the variables
+# Rank importance of the variables
 #
 
-logreg = LogisticRegression(penalty=penalty, C=1)
-rfe = RFE(logreg, 1)
-rfe = rfe.fit(data.x_train, data.y_train)
-rank = rfe.ranking_ - 1
+if USE_RFE:
+    logreg = LogisticRegression(penalty=penalty, C=1)
+    rfe = RFE(logreg, 1)
+    rfe = rfe.fit(data.x_train, data.y_train)
+    rank = rfe.ranking_ - 1
+else:
+    select = SelectKBest(k=data.num_features)
+    select_fit = select.fit(data.x_train, data.y_train)
+    scores  = select_fit.scores_
+    isort = np.argsort(scores)[::-1]
+    rank = np.zeros(data.num_features, dtype="int32")
+    for i in range(data.num_features): rank[i] = np.where(isort == i)[0]
 
 print(50*"-")
-print("Recursive feature elimation ranking".upper())
+print("Feature ranking".upper())
 print(50*"-")
 cols = np.array(data.features.columns.tolist())[np.argsort(rank)]
 for i in range(rank.shape[0]):
@@ -341,6 +339,8 @@ train_acc = np.zeros(nfeatures, dtype="float64")
 valid_acc = np.zeros(nfeatures, dtype="float64")
 train_std = np.zeros(nfeatures, dtype="float64")
 valid_std = np.zeros(nfeatures, dtype="float64")
+
+logreg = LogisticRegression(penalty=penalty, C=1)
 
 if USE_SEASON_SPLIT:
     kfold = model_selection.KFold(n_splits=data.num_seasons_train, shuffle=False)
