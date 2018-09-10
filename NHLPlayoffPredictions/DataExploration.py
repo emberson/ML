@@ -4,6 +4,7 @@ from matplotlib import cm as cm
 matplotlib.use("PDF")
 import pylab as py
 import sklearn.feature_selection
+from sklearn.metrics import confusion_matrix
 from PlayoffData import PlayoffData
 import os
 
@@ -18,9 +19,13 @@ input_template = "seriesYEAR_REPLACE.dat"
 # NHL seasons to aggregate data from 
 seasons = np.arange(2008, 2018+1)
 
+# Flag to split training, validation, and testing data by season
+USE_SEASON_SPLIT = False
+nseasons_test    = 3
+
 # Training split fraction and seed
 train_fraction = 0.7
-seed_split     = 92
+seed_split     = 3141592
 
 # Various plots
 plot_dir = "plots/DataExploration/"
@@ -30,6 +35,42 @@ plot_feature_hist    = plot_dir + "hist-_FEATURE_.pdf"
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
 # -------------------------------------------------------------------------------------------------------
+
+def EvaluateBaseline(xtest, ytest):
+    """
+    Evaluate the accuracy of the baseline model which selects the home team as the winner.
+    """
+
+    # Make the baseline prediction
+    xhome = np.array(xtest.Home).astype("int32")
+    ypred = np.zeros(ytest.shape[0], dtype="int32")
+    ypred[np.where(xhome == 1)] = 1
+
+    # Print the confusion matrix 
+    cmat = confusion_matrix(ytest, ypred)
+    PrintConfusionMatrix(cmat)
+
+def PrintConfusionMatrix(cmat, sh=50, sl=15):
+    """
+    Print confusion matrix to screen along with details of incorrectly classified data (if desired). 
+    """
+
+    # Print the confusion matrix to screen
+    tn, fp, fn, tp = cmat.ravel()
+    print(sh*"-")
+    print("Baseline Model Summary".upper())
+    print(sh*"-")
+    print(("TP = "+str(tp)).ljust(sl) + ("FP = "+str(fp)).ljust(sl))
+    print(("FN = "+str(fn)).ljust(sl) + ("TN = "+str(tn)).ljust(sl))
+    precision = tp/(1.*(tp+fp))
+    recall    = tp/(1.*(tp+fn))
+    f1        = 2*precision*recall/(precision+recall)
+    print("P   : {:.2f}".format(precision))
+    print("R   : {:.2f}".format(recall))
+    print("F1  : {:.2f}".format(f1))
+    print(sh*"-")
+    print("Accuracy : {:.2f}".format((tp+tn)/(tp+tn+fp+fn)))
+    print(sh*"-")
 
 def PlotHistogram(pf, x, y, f):
     """
@@ -183,14 +224,11 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 # Gather playoff data over all seasons
 #
 
-data = PlayoffData(input_root_dir, input_template, seasons)
+data = PlayoffData(input_root_dir, input_template, seasons, seed_split, train_fraction, USE_SEASON_SPLIT, nseasons_test)
 
 #
 # Perform ANOVA test to rank features
 #
-
-data.SetSplitSeed(seed_split)
-data.SplitTrainingTestingData(train_fraction)
 
 select = sklearn.feature_selection.SelectKBest(k=data.num_features)
 select_fit = select.fit(data.x_train, data.y_train)
@@ -234,4 +272,9 @@ for feature in data.features: PlotHistogram(plot_feature_hist, data.features[fea
 # So we would delete the other columns as in: 
 #data.DropFeatures(["Home", "PP", "CD", "CD_N", "CD_M", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
 
+#
+# Baseline prediction for the data
+#
+
+EvaluateBaseline(data.x_test, data.y_test)
 
