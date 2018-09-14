@@ -264,13 +264,13 @@ for feature in data.features: PlotHistogram(plot_feature_hist, data.features[fea
 # From correlation matrix we find features that are within 0.75 correlation which are:
 # 1) Home, PP, BB
 # 2) CD, FD, etc.
-# 3) GD, PDO, etc.
+# 3) GD, PWP, PDO, etc.
 # We use ANOVA to rank which of these are most important in each group and find this to be:
 # 1) BB
 # 2) FD
 # 3) GD
 # So we would delete the other columns as in: 
-#data.DropFeatures(["Home", "PP", "CD", "CD_N", "CD_M", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
+#data.DropFeatures(["Home", "PP", "CD", "CD_N", "CD_M", "PWP", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
 
 #
 # Baseline prediction for the data

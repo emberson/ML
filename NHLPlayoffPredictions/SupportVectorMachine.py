@@ -1,12 +1,10 @@
 import numpy as np
 import pandas as pd
 import matplotlib
-from matplotlib import cm as cm
 matplotlib.use("PDF")
 import pylab as py
-from sklearn import model_selection
-from sklearn.metrics import confusion_matrix,classification_report
-from sklearn.metrics import roc_curve,roc_auc_score
+from sklearn.model_selection import KFold,GridSearchCV,cross_validate
+from sklearn.metrics import confusion_matrix
 from sklearn.feature_selection import RFE,SelectKBest
 from sklearn.svm import SVC
 from PlayoffData import PlayoffData
@@ -34,7 +32,7 @@ seed_split     = 3141592
 
 # Kfold parameters
 seed_kfold   = 2718281
-nsplit_kfold = 5 
+nsplit_kfold = 5
 
 # Default parameters for supprot vector classifier
 kernel0 = "linear"
@@ -251,6 +249,12 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 data = PlayoffData(input_root_dir, input_template, seasons, seed_split, train_fraction, USE_SEASON_SPLIT, nseasons_test)
 
 #
+# Drop multicollinear features 
+#
+
+data.DropFeatures(["Home", "BB", "CD", "CD_N", "CD_M", "PWP", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
+
+#
 # Compute information value for each feature
 #
 
@@ -305,9 +309,9 @@ train_std = np.zeros(nfeatures, dtype="float64")
 valid_std = np.zeros(nfeatures, dtype="float64")
 
 if USE_SEASON_SPLIT:
-    kfold = model_selection.KFold(n_splits=data.num_seasons_train, shuffle=False)
+    kfold = KFold(n_splits=data.num_seasons_train, shuffle=False)
 else:
-    kfold = model_selection.KFold(n_splits=nsplit_kfold, random_state=seed_kfold)
+    kfold = KFold(n_splits=nsplit_kfold, random_state=seed_kfold)
 
 nfeatures_min = 0
 
@@ -321,7 +325,7 @@ for i in range(nfeatures_min, nfeatures):
     svm.fit(data.x_train, data.y_train)
 
     # Use K-fold cross validation to compute training and validation accuracy 
-    result = model_selection.cross_validate(svm, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
+    result = cross_validate(svm, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
     train_acc[i] = result["train_score"].mean()
     valid_acc[i] = result["test_score"].mean()
     train_std[i] = result["train_score"].std()
@@ -356,7 +360,7 @@ if kernel0 == "linear":
     search_params = {"C": Csearch}
 else:
     search_params = {"C": Csearch, "gamma": Gsearch}
-grid = model_selection.GridSearchCV(svm, search_params, cv=kfold, scoring="accuracy", return_train_score=True)
+grid = GridSearchCV(svm, search_params, cv=kfold, scoring="accuracy", return_train_score=True)
 grid.fit(data.x_train, y=data.y_train)
 Copt = grid.best_params_["C"]
 if kernel0 == "rbf": Gopt = grid.best_params_["gamma"]
