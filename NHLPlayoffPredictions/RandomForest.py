@@ -1,16 +1,13 @@
 import numpy as np
 import pandas as pd
 import matplotlib
-from matplotlib import cm as cm
 matplotlib.use("PDF")
 import pylab as py
-from sklearn import model_selection
+from sklearn.model_selection import KFold,GridSearchCV,cross_validate
+from sklearn.metrics import confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import RFE,SelectKBest
 from PlayoffData import PlayoffData
 import os
-
-# https://towardsdatascience.com/hyperparameter-tuning-the-random-forest-in-python-using-scikit-learn-28d2aa77dd74
 
 # -------------------------------------------------------------------------------------------------------
 # PARAMETERS
@@ -33,23 +30,33 @@ seed_split     = 3141592
 
 # Kfold parameters
 seed_kfold   = 2718281
-nsplit_kfold = 5 
+nsplit_kfold = 5
 
 # Default parameters for random forest classifier
 criterion0         = "gini"
-n_estimators0      = 500
-max_depth0         = 25 
-min_samples_split0 = 3
-min_samples_leaf0  = 4
+max_features0      = "auto"
+bootstrap0         = True
+n_jobs0            = -1
+seed0              = 299792458
+
+# Hyperparameters to optimize
+HYPERPARAMETER_SEARCH    = True
+n_estimators_search      = np.array([50, 75, 100, 125])
+max_depth_search         = np.array([1, 2, 3, 4])
+min_samples_split_search = np.array([2, 4, 8, 16])
+min_samples_leaf_search  = np.array([1, 2, 4, 6])
+
+# If skipping the optimization step, use these parameters instead
+n_estimators0      = 100
+max_depth0         = 3
+min_samples_split0 = 2
+min_samples_leaf0  = 1
 
 # Various plots
 plot_dir = "plots/RandomForest/"
-plot_nfeatures_tverr = plot_dir + "nfeatures_error.pdf" 
-plot_reg_tverr       = plot_dir + "regularization_error.pdf" 
 plot_feature_summary = plot_dir + "feature-F1-F2.pdf"
 
 # Some flags
-USE_RFE              = False
 PLOT_FEATURE_SUMMARY = False
 
 # -------------------------------------------------------------------------------------------------------
@@ -94,62 +101,6 @@ def PrintErrorSummary(m0, x0, y0, yp, sh=50):
     fn = x0.iloc[jn]
     print(pd.concat([mn,fn], axis=1))
     print(sh*"=")
-
-def PlotError(pf, xx, tacc, vacc, command):
-    """
-    Make a plot comparing the training and validation error as a function of the feature set size.
-    """
-
-    #
-    # Plot paramters
-    #
-
-    # Labels
-    if command == 0:
-        xlabel = r"$N_{\rm features}$"
-    elif command == 1:
-        xlabel = r"${\rm log}_{10}(C)$"
-    ylabel = r"${\rm Error}$"
-    tlabel = r"${\rm Training}$"
-    vlabel = r"${\rm Validation}$"
-
-    # Plot window
-    left   = 0.11
-    right  = 0.97
-    bottom = 0.11
-    top    = 0.97
-
-    #
-    # Make the plot
-    #
-
-    fig_width_pt  = 300.
-    inches_per_pt = 1. / 72.27
-    fig_width     = fig_width_pt * inches_per_pt
-    fig_height    = fig_width
-    fig_size      = [fig_width, fig_height]
-    params        = {'backend': 'ps', 'axes.labelsize': 13, 'font.size': 12, \
-                    'legend.fontsize': 12, 'xtick.labelsize': 12, 'ytick.labelsize': 12, \
-                    'text.usetex': True, 'figure.figsize': fig_size}
-
-    py.rcParams.update(params)
-    fig = py.figure(1)
-    py.clf()
-    py.subplots_adjust(left=left, right=right, bottom=bottom, top=top, hspace=0., wspace=0.)
-
-    py.plot(xx, 1-tacc, "k-", label=tlabel)
-    py.plot(xx, 1-vacc, "r-", label=vlabel)
-
-    lg = py.legend(loc="best", fancybox=True)
-    lg.draw_frame(False)
-
-    py.xlabel(xlabel)
-    py.ylabel(ylabel)
-
-    py.savefig(pf)
-    py.close()
-
-    print("Error plot saved to " + pf)
 
 def LabelFMT(labs):
     """
@@ -239,108 +190,90 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 data = PlayoffData(input_root_dir, input_template, seasons, seed_split, train_fraction, USE_SEASON_SPLIT, nseasons_test)
 
 #
-# Compute information value for each feature
+# Drop multicollinear features 
 #
 
-data.ComputeInformationValue()
+data.DropFeatures(["Home", "BB", "CD", "CD_N", "CD_M", "PWP", "PDO", "PDO_N", "PDO_M", "PDOST", "PDOST_N", "PDOST_M"])
 
 #
-# Rank importance of the variables
+# Setup random forest classifier and kfold validation model
 #
 
-if USE_RFE:
-    rf = RandomForestClassifier(n_estimators=n_estimators0, criterion=criterion0, max_depth=max_depth0, \
-                                min_samples_split=min_samples_split0, min_samples_leaf=min_samples_leaf0)
-    rfe = RFE(rf, 1)
-    rfe = rfe.fit(data.x_train, data.y_train)
-    rank = rfe.ranking_ - 1
-else:
-    select = SelectKBest(k=data.num_features)
-    select_fit = select.fit(data.x_train, data.y_train)
-    scores  = select_fit.scores_
-    isort = np.argsort(scores)[::-1]
-    rank = np.zeros(data.num_features, dtype="int32")
-    for i in range(data.num_features): rank[i] = np.where(isort == i)[0]
-
-print(50*"-")
-print("Feature ranking".upper())
-print(50*"-")
-cols = np.array(data.features.columns.tolist())[np.argsort(rank)]
-for i in range(rank.shape[0]):
-    print(str(i).ljust(4) + " : " + str(cols[i]).ljust(20) + str(data.IV[cols[i]]).ljust(20))
-print(50*"-")
-
-#
-# Setup default random forest classifier to determine number of retained variables
-#
-
-rf = RandomForestClassifier(n_estimators=n_estimators0, criterion=criterion0, max_depth=max_depth0, \
-                            min_samples_split=min_samples_split0, min_samples_leaf=min_samples_leaf0)
-
-#
-# Compute training and validation accuracy as a function of the number of retained variables
-#
-
-nfeatures = data.num_features
-train_acc = np.zeros(nfeatures, dtype="float64")
-valid_acc = np.zeros(nfeatures, dtype="float64")
-train_std = np.zeros(nfeatures, dtype="float64")
-valid_std = np.zeros(nfeatures, dtype="float64")
+rf = RandomForestClassifier(criterion=criterion0, max_features=max_features0, bootstrap=bootstrap0, random_state=seed0, n_jobs=n_jobs0)
 
 if USE_SEASON_SPLIT:
-    kfold = model_selection.KFold(n_splits=data.num_seasons_train, shuffle=False)
+    kfold = KFold(n_splits=data.num_seasons_train, shuffle=False)
 else:
-    kfold = model_selection.KFold(n_splits=nsplit_kfold, random_state=seed_kfold)
-
-for i in range(nfeatures):
-
-    # Restrict data to only the desired set of features
-    cols = data.features.columns[np.where(rank <= i)]
-    data.UseSelectedTrainingTestingFeatures(cols)
-
-    # Run logistic regression with reduced data set
-    rf.fit(data.x_train, data.y_train)
-
-    # Use K-fold cross validation to compute training and validation accuracy 
-    result = model_selection.cross_validate(rf, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
-    train_acc[i] = result["train_score"].mean()
-    valid_acc[i] = result["test_score"].mean()
-    train_std[i] = result["train_score"].std()
-    valid_std[i] = result["test_score"].std()
+    kfold = KFold(n_splits=nsplit_kfold, random_state=seed_kfold)
 
 #
-# Make a plot comparing training and validation accuracy as a function of number of retained variables
+# Use grid search to optimize hyperparameters
 #
 
-PlotError(plot_nfeatures_tverr, np.arange(nfeatures)+1, train_acc, valid_acc, 0)
+if HYPERPARAMETER_SEARCH:
+
+    search_params = {"n_estimators":n_estimators_search, "max_depth":max_depth_search, \
+                     "min_samples_split":min_samples_split_search, "min_samples_leaf":min_samples_leaf_search}
+
+    grid = GridSearchCV(rf, search_params, cv=kfold, scoring="accuracy", return_train_score=True)
+    grid.fit(data.x_train, y=data.y_train)
+
+    # Unpack optimal parameters 
+    opt_params         = grid.best_params_
+    n_estimators0      = opt_params["n_estimators"]
+    max_depth0         = opt_params["max_depth"]
+    min_samples_split0 = opt_params["min_samples_split"]
+    min_samples_leaf0  = opt_params["min_samples_leaf"]
 
 #
-# Choose the number of features as that which maximizes the validation accuracy
+# Evaluate accuracy with optimal parameters
 #
 
-nf_use     = valid_acc.argmax()+1
-cols_use   = data.features.columns[np.where(rank < nf_use)]
-print("Choosing nfeatures  : {:d}".format(nf_use))
-print("Training accuracy   : {:.2f} +/- {:.2f}".format(train_acc[nf_use-1], train_std[nf_use-1]))
-print("Validation accuracy : {:.2f} +/- {:.2f}".format(valid_acc[nf_use-1], valid_std[nf_use-1]))
-data.UseSelectedTrainingTestingFeatures(cols_use)
+rf = RandomForestClassifier(n_estimators=n_estimators0, max_depth=max_depth0, min_samples_split=min_samples_split0, min_samples_leaf=min_samples_leaf0, \
+                            criterion=criterion0, max_features=max_features0, bootstrap=bootstrap0, random_state=seed0, n_jobs=n_jobs0)
 
 rf.fit(data.x_train, data.y_train)
+result = cross_validate(rf, data.x_train, y=data.y_train, cv=kfold, scoring="accuracy", return_train_score=True)
+print("Training accuracy   : {:.2f} +/- {:.2f}".format(result["train_score"].mean(), result["train_score"].std()))
+print("Validation accuracy : {:.2f} +/- {:.2f}".format(result["test_score"].mean(), result["test_score"].std()))
 print("Test accuracy       : {:.2f}".format(rf.score(data.x_test, data.y_test)))
+
+#
+# Print confusion matrix for prediciton
+#
+
+y_pred = rf.predict(data.x_test)
+confusion_matrix = confusion_matrix(data.y_test, y_pred)
+PrintConfusionMatrix(confusion_matrix)
+
+#
+# Print information regarding misclassified samples and make plots showing where errors appear in feature space
+#
+
+metadata = data.GrabMetaData(data.x_test)
+PrintErrorSummary(metadata, data.x_test, data.y_test, y_pred)
+if PLOT_FEATURE_SUMMARY:
+    for i in range(cols_use.shape[0]):
+        plot_file_1 = plot_feature_summary.replace("F1", str(cols_use[i]))
+        for j in range(i+1, cols_use.shape[0]):
+            plot_file = plot_file_1.replace("F2", str(cols_use[j]))
+            PlotFeatureSummary(plot_file, data.x_test, cols_use[i], cols_use[j], data.y_test, y_pred)
 
 #
 # Show final ranking of importance
 #
 
-rfe = RFE(rf, 1)
-rfe = rfe.fit(data.x_train, data.y_train)
-rank = rfe.ranking_ - 1
+scores = rf.feature_importances_
+isort = np.argsort(scores)[::-1]
+rank = np.zeros(len(data.x_train.columns.tolist()), dtype="int32")
+for i in range(rank.shape[0]): rank[i] = np.where(isort == i)[0]
+scores = scores[isort] 
 
 print(50*"-")
 print("Feature ranking".upper())
 print(50*"-")
 cols = np.array(data.x_train.columns.tolist())[np.argsort(rank)]
 for i in range(rank.shape[0]):
-    print(str(i).ljust(4) + " : " + str(cols[i]).ljust(20) + str(data.IV[cols[i]]).ljust(20))
+    print(str(i).ljust(4) + " : " + str(cols[i]).ljust(20) + str(scores[i]).ljust(20))
 print(50*"-")
 
