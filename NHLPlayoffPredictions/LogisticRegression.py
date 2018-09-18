@@ -350,7 +350,7 @@ logreg = LogisticRegression(penalty=penalty, C=1)
 if USE_SEASON_SPLIT:
     kfold = KFold(n_splits=data.num_seasons_train, shuffle=False)
 else:
-    kfold = KFold(n_splits=nsplit_kfold, random_state=seed_kfold)
+    kfold = KFold(n_splits=nsplit_kfold, random_state=seed_kfold, shuffle=True)
 
 for i in range(nfeatures):
 
