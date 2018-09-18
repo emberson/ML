@@ -23,9 +23,13 @@ output_template = input_template
 # NHL seasons to aggregate data from 
 seasons = np.arange(2008, 2018+1)
 
+# Flag to split training, validation, and testing data by season
+USE_SEASON_SPLIT = False
+nseasons_test    = 3
+
 # Training split fraction and seed
 train_fraction = 0.7
-seed_split     = 92
+seed_split     = 3141592
 
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
@@ -70,9 +74,6 @@ data = PlayoffData(input_root_dir, input_template, seasons)
 #
 # Perform PCA using only the training data
 #
-
-data.SetSplitSeed(seed_split)
-data.SplitTrainingTestingData(train_fraction)
 
 pca = PCA()
 data.features = pd.DataFrame(pca.fit(data.x_train).transform(data.features))
