@@ -1,14 +1,14 @@
-# ------------------------------------------------------------------------------------------------- 
+# ------------------------------------------------------
 # OVERVIEW
-# ------------------------------------------------------------------------------------------------- 
+# ------------------------------------------------------
 
 This repository contains examples of machine learning projects I have been working on mainly for my
 own learning experience and personal pleasure. All programs are written in Python 3. See specific
 documentation below for each project. 
 
-# ------------------------------------------------------------------------------------------------- 
-# PREDICTING NHL PLAYOFF SERIES WINNERS (DIRECTORY: NHLPlayoffPredictions)
-# -------------------------------------------------------------------------------------------------
+# ------------------------------------------------------
+# PREDICTING NHL PLAYOFF SERIES WINNERS
+# ------------------------------------------------------
 
 This project grew out of my desire to determine how well NHL playoff series can be predicted using
 machine learning applications. Going into this, I was not overly optimistic about the accuracy one
