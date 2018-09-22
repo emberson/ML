@@ -12,7 +12,7 @@ author_query = "emberson"
 
 # Output file to save arXiv IDs
 output_dir  = "data/"
-output_file = output_dir + "inputIDs.dat"
+output_file = output_dir + "authorIDs.dat"
 
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
