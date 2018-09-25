@@ -7,12 +7,12 @@ import os.path
 # PARAMETERS
 # -------------------------------------------------------------------------------------------------------
 
-# Author field to query
-author_query = "emberson"
+# Authors to query
+authors = np.array(["emberson"])
 
 # Output file to save arXiv IDs
-output_dir  = "data/"
-output_file = output_dir + "authorIDs.dat"
+output_dir       = "data/"
+output_file_temp = output_dir + "author-%s-ids.dat"
 
 # -------------------------------------------------------------------------------------------------------
 # FUNCTIONS
@@ -93,28 +93,35 @@ def SaveIDs(dw, ids):
     fw.close()
 
     print("arXiv IDs saved to " + dw)
-    print()
 
 # -------------------------------------------------------------------------------------------------------
 # MAIN
 # -------------------------------------------------------------------------------------------------------
 
-#
-# Run author query through the arXiv API
-#
-
-query = RunAuthorQuery(author_query)
-
-#
-# Interact with user to determine which search results are correct
-#
-
-ids = UserSelectedResults(query)
-
-#
-# Save selected IDs to text file
-#
-
 if not os.path.isdir(output_dir): os.makedirs(output_dir)
-SaveIDs(output_file, ids)
+
+for author in authors:
+
+    print("Working on author : %s ..." % author)
+
+    #
+    # Run author query through the arXiv API
+    #
+
+    query = RunAuthorQuery(author)
+
+    #
+    # Interact with user to determine which search results are correct
+    #
+
+    ids = UserSelectedResults(query)
+
+    #
+    # Save selected IDs to text file
+    #
+
+    output_file = output_file_temp % author
+    SaveIDs(output_file, ids)
+
+    print("Done!")
 
