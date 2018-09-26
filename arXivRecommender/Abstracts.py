@@ -3,6 +3,7 @@ import pandas as pd
 from urllib.request import urlopen
 import feedparser
 import os.path
+import time
 
 class Abstracts:
     """
@@ -16,10 +17,13 @@ class Abstracts:
     id = "id"
     abstract = "abstract"
 
+    # Default arXiv corpus category
+    arxiv_category = "astro-ph.CO"
+
     # Some default flags
     automatic_author_update = False
 
-    def __init__(self, data_file):
+    def __init__(self, data_file, category=None):
         """
         Instantiate class with the input/output file containing the pandas dataframe. 
         If this file exists, read its contents; otherwise, construct an empty dataframe. 
@@ -27,6 +31,9 @@ class Abstracts:
 
         # File which stores the dataframe
         self.data_file = data_file
+
+        # Update corpus category if provided
+        if category is not None: self.arxiv_category = category
 
         # Either read in existing dataframe or create an empty one
         if os.path.isfile(self.data_file):
@@ -60,24 +67,118 @@ class Abstracts:
         # Iterate through each paper in the query and (optionally) ask user wheter to add to the list
         for paper in feed.entries:
 
-            AddPaper = False
+            AddAbstract = False
             title, authors, id, abstract = self.ParsePaper(paper)
 
             # Only continue if this paper is not already in the list
-            if self.collection[self.id].str.contains(id).sum():
-                continue
+            if self.CheckID(id):
+                print("Skipping already included abstract %s" % id)
+                continue 
             
             # Either automatically add this paper or ask user for permission
             if self.automatic_author_update:
-                AddPaper = True
+                AddAbstract = True
             else:
                 print("Title   : ", title)
                 print("Authors : ", authors)
                 print("ID      : ", id)
-                AddPaper = self.ParseUserInput(input(((" >>> Do you want to add this paper to author %s [y/n] ? ") % author).upper()))
-            if AddPaper:
-                self.collection = self.collection.append({self.id:id, self.abstract:abstract}, ignore_index=True)
-                print(" >>> Added to list ID : %s" % id)
+                AddAbstract = self.ParseUserInput(input(((" >>> Do you want to add this paper to author %s [y/n] ? ") % author).upper()))
+
+            # Add abstract if desired
+            if AddAbstract: self.AddAbstract(id, abstract, Verbose=True)
+
+        # Sort so that most recent paper comes first
+        self.SortDescending()
+
+    def UpdateCorpus(self, ncorpus, nabs_per_iter=100, wait_time=3):
+        """
+        Update corpus so that it contains the ncorpus most recent abstracts in the arxiv category.
+        """
+
+        #
+        # Make sure collection is sorted with most recent first so that we know when to stop
+        #
+
+        self.SortDescending()
+
+        #
+        # Page through arXiv query results (see https://arxiv.org/help/api/examples/python_arXiv_paging_example.txt)
+        #
+
+        # Template URL query that sorts by submission date
+        url_template = "http://export.arxiv.org/api/query?search_query=cat:"+self.arxiv_category+"&start=%i&max_results=%i&sortBy=submittedDate"
+
+        for i in range(0, ncorpus, nabs_per_iter):
+
+            # Query the arXiv API for search results within specifix document range
+            url = url_template % (i, nabs_per_iter)
+            query = urlopen(url).read()
+
+            # Store abstract of each new paper and stop if we have already added it 
+            feed = feedparser.parse(query)
+            StopSearch = False
+            for paper in feed.entries:
+                title, authors, id, abstract = self.ParsePaper(paper)
+                if self.CheckID(id):
+                    StopSearch = True
+                    break
+                self.AddAbstract(id, abstract, Verbose=False)
+            if StopSearch: break
+
+            # Friendly wait before querying the API again 
+            time.sleep(wait_time)
+
+        #
+        # Trim so that only the ncorpus most recent abstracts are included 
+        #
+
+        self.TrimCollection(ncorpus)
+
+        #
+        # Print some info to screen
+        #
+
+        print()
+        print("Corpus contains %i abstracts" % self.collection.shape[0])
+        print("Newest arxiv id : %s" % self.collection[self.id].iloc[0])
+        print("Oldest arxiv id : %s" % self.collection[self.id].iloc[-1])
+        print()
+
+    def AddAbstract(self, id, abstract, Verbose=False):
+        """
+        Add the provided abstract to the dataframe.
+        """
+
+        self.collection = self.collection.append({self.id:id, self.abstract:abstract}, ignore_index=True)
+        if Verbose: print("Added abstract with id : %s" % id)
+
+    def CheckID(self, id):
+        """
+        Check arxiv id to see if this abstract is already in the collection.
+        """
+
+        contained = False
+        if self.collection[self.id].str.contains(id).sum(): contained = True
+        return contained
+
+    def SortDescending(self):
+        """
+        Sort the dataframe in descending order of arxiv id (makes most recent first)
+        """
+
+        self.collection.sort_values(by=[self.id], ascending=False, inplace=True)
+        self.collection.reset_index(drop=True, inplace=True)
+
+    def TrimCollection(self, n):
+        """
+        Trim so that only the n most recent abstracts are in the collection.
+        """
+    
+        # First make sure most recent are first
+        self.SortDescending()
+
+        # Now keep only n most recent
+        self.collection = self.collection[:n]
 
     def ParsePaper(self, paper):
         """
