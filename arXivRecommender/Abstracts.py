@@ -1,7 +1,13 @@
 import numpy as np
 import pandas as pd
 from urllib.request import urlopen
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem.snowball import SnowballStemmer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
 import feedparser
+import string
 import os.path
 import time
 
@@ -16,12 +22,14 @@ class Abstracts:
     # Column names in pandas dataframe
     id = "id"
     abstract = "abstract"
+    cleaned  = "cleaned"
 
     # Default arXiv corpus category
     arxiv_category = "astro-ph.CO"
 
     # Some default flags
     automatic_author_update = False
+    UseStemming = False
 
     def __init__(self, data_file, category=None):
         """
@@ -108,6 +116,9 @@ class Abstracts:
         # Template URL query that sorts by submission date
         url_template = "http://export.arxiv.org/api/query?search_query=cat:"+self.arxiv_category+"&start=%i&max_results=%i&sortBy=submittedDate"
 
+        # Keep track of how many new abstracts have been added
+        nadd = 0
+
         for i in range(0, ncorpus, nabs_per_iter):
 
             # Query the arXiv API for search results within specifix document range
@@ -123,6 +134,7 @@ class Abstracts:
                     StopSearch = True
                     break
                 self.AddAbstract(id, abstract, Verbose=False)
+                nadd += 1
             if StopSearch: break
 
             # Friendly wait before querying the API again 
@@ -140,8 +152,9 @@ class Abstracts:
 
         print()
         print("Corpus contains %i abstracts" % self.collection.shape[0])
-        print("Newest arxiv id : %s" % self.collection[self.id].iloc[0])
-        print("Oldest arxiv id : %s" % self.collection[self.id].iloc[-1])
+        print("Abstracts added now : %s" % nadd)
+        print("Newest arxiv id     : %s" % self.collection[self.id].iloc[0])
+        print("Oldest arxiv id     : %s" % self.collection[self.id].iloc[-1])
         print()
 
     def AddAbstract(self, id, abstract, Verbose=False):
@@ -222,4 +235,97 @@ class Abstracts:
 
         self.collection = pd.read_csv(self.data_file, index_col=0, dtype=str, sep="\t")
         print("Abstracts read from " + self.data_file)
+
+    def TokenizeAbstracts(self):
+        """
+        Tokenize the text in each abstract to compute uni-, bi-, and trigrams. First clean the
+        text by removing punctuation, converting to lowercase, and removing numeric, short, and stop words. 
+        """
+
+        #
+        # Add new column to dataframe to store cleaned text
+        #
+        
+        self.collection.insert(self.collection.shape[1], self.cleaned, "")
+    
+        #
+        # Clean abstract one row at a time 
+        #
+
+        for index, row in self.collection.iterrows():
+
+            # Grab abstract
+            abstract = row[self.abstract]
+
+            # Separate hyphenated words
+            abstract = abstract.replace("-", " ")
+
+            # Convert to lowercase words
+            words = word_tokenize(abstract)
+            words = [w.lower() for w in words]
+
+            # Remove punctuation
+            table = str.maketrans("", "", string.punctuation)
+            words = [w.translate(table) for w in words]
+
+            # Remove numeric words
+            words = [w for w in words if w.isalpha()] 
+
+            # Remove stop words
+            stop_words = set(stopwords.words("english"))
+            words = [w for w in words if w not in stop_words]
+        
+            # Remove short words
+            words = [w for w in words if len(w) > 2]
+
+            # Stem words
+            if self.UseStemming:
+                stemmer = SnowballStemmer("english")
+                words = [stemmer.stem(w) for w in words]
+
+            # Place cleaned data in appropriate column
+            cleaned_text = ""
+            for w in words: cleaned_text += w + " "
+            row[self.cleaned] = cleaned_text
+
+        print("Cleaned data")
+
+    def FitCountVectorizer(self):
+        """
+        Fit vocabulary using the corpus text and return the vectorizer.
+        """
+
+        # Store cleaned text as a list
+        corpus_text = [ ]
+        for index, row in self.collection.iterrows(): corpus_text.append(row[self.cleaned])
+
+        # Compute matrix of token counts
+        vectorizer = CountVectorizer(ngram_range=(1,3))
+        vectorizer.fit_transform(corpus_text)
+
+        return vectorizer
+
+    def ComputeWeights(self, vectorizer):
+        """
+        Compute TF-IDF weights for the documents using the vectorizer trained on the corpus.
+        """
+
+        # Store cleaned text as a list 
+        doc_text = [ ]
+        for index, row in self.collection.iterrows(): doc_text.append(row[self.cleaned])
+
+        # Compute term frequency matrix
+        fmatrix = vectorizer.transform(doc_text)
+
+        # Calculate TF-IDF weights of this matrix
+        transformer = TfidfTransformer()
+        tfidf = transformer.fit_transform(fmatrix)
+
+        # Store results in a dataframe sorted by tfidf score
+        tfidf = np.asarray(tfidf.mean(axis=0)).ravel().tolist()
+        tfidf = pd.DataFrame({"term": vectorizer.get_feature_names(), "tfidf": tfidf})
+        tfidf.sort_values(by="tfidf", ascending=False, inplace=True)
+        print(tfidf.head(40))
+
+        return tfidf
 
