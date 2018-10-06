@@ -4,8 +4,7 @@ from urllib.request import urlopen
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 import feedparser
 import string
 import os.path
@@ -288,44 +287,23 @@ class Abstracts:
             for w in words: cleaned_text += w + " "
             row[self.cleaned] = cleaned_text
 
-        print("Cleaned data")
+        print("Cleaned and tokenized abstracts")
 
-    def FitCountVectorizer(self):
+    def ComputeTfidfWeights(self):
         """
-        Fit vocabulary using the corpus text and return the vectorizer.
-        """
-
-        # Store cleaned text as a list
-        corpus_text = [ ]
-        for index, row in self.collection.iterrows(): corpus_text.append(row[self.cleaned])
-
-        # Compute matrix of token counts
-        vectorizer = CountVectorizer(ngram_range=(1,3))
-        vectorizer.fit_transform(corpus_text)
-
-        return vectorizer
-
-    def ComputeWeights(self, vectorizer):
-        """
-        Compute TF-IDF weights for the documents using the vectorizer trained on the corpus.
+        Compute TF-IDF weights using the cleaned and tokenized abstracts.
         """
 
         # Store cleaned text as a list 
         doc_text = [ ]
         for index, row in self.collection.iterrows(): doc_text.append(row[self.cleaned])
 
-        # Compute term frequency matrix
-        fmatrix = vectorizer.transform(doc_text)
-
-        # Calculate TF-IDF weights of this matrix
-        transformer = TfidfTransformer()
-        tfidf = transformer.fit_transform(fmatrix)
-
-        # Store results in a dataframe sorted by tfidf score
-        tfidf = np.asarray(tfidf.mean(axis=0)).ravel().tolist()
-        tfidf = pd.DataFrame({"term": vectorizer.get_feature_names(), "tfidf": tfidf})
-        tfidf.sort_values(by="tfidf", ascending=False, inplace=True)
-        print(tfidf.head(40))
-
-        return tfidf
+        vectorizer = TfidfVectorizer(ngram_range=(1,3), norm="l2")
+        weights = vectorizer.fit_transform(doc_text)
+        weights = np.asarray(weights.mean(axis=0)).ravel().tolist()
+        weights = pd.DataFrame({"term": vectorizer.get_feature_names(), "weights": weights})
+        weights.sort_values(by="weights", ascending=False, inplace=True)
+        weights.reset_index(drop=True, inplace=True)
+    
+        return weights
 
