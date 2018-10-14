@@ -6,11 +6,13 @@ matplotlib.use("PDF")
 import pylab
 import os
 
+import pandas as pd
+
 # -------------------------------------------------------------------------------------------------------
 # PARAMETERS
 # -------------------------------------------------------------------------------------------------------
 
-# Authors to construct tag clouds for 
+# Authors to construct word clouds for 
 authors = np.array(["emberson"])
 
 # Input file containing author abstracts 
@@ -79,7 +81,7 @@ def ReadPalette(data_file, N=256):
 
     return cmap
 
-def PlotWordCloud(pf, w, font_path, cmap_path, cmap="jet", max_terms=50):
+def PlotWordCloud(pf, w, font_path, cmap_path, cmap="jet", max_terms=64):
     """
     Plot author word cloud.
     """
