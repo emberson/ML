@@ -12,18 +12,19 @@ import time
 
 class Abstracts:
     """
-    Class that holds a collection of abstracts and their corresponding arXiv ids either for the
-    entire corpus or for an individual author. In either case, this class contains the functionality
+    Class that holds a collection of abstracts and their corresponding arXiv ids either for the most
+    recent submissions or for an individual author. In either case, this class contains the functionality
     to update the collection with new arXiv submissions. Natural language processing algorithms are
     run directly on this class to compute term and inverse document frequency.
     """
 
     # Column names in pandas dataframe
     id = "id"
+    title = "title"
     abstract = "abstract"
     cleaned  = "cleaned"
 
-    # Default arXiv corpus category
+    # Default arXiv category to search 
     arxiv_category = "astro-ph.CO"
 
     # Some default flags
@@ -39,14 +40,14 @@ class Abstracts:
         # File which stores the dataframe
         self.data_file = data_file
 
-        # Update corpus category if provided
+        # Update arxiv category if provided
         if category is not None: self.arxiv_category = category
 
         # Either read in existing dataframe or create an empty one
         if os.path.isfile(self.data_file):
             self.Read()
         else:
-            self.collection = pd.DataFrame(columns=[self.id, self.abstract])
+            self.collection = pd.DataFrame(columns=[self.id, self.title, self.abstract])
 
     def AutomaticAuthorUpdate(self, flag):
         """
@@ -92,14 +93,14 @@ class Abstracts:
                 AddAbstract = self.ParseUserInput(input(((" >>> Do you want to add this paper to author %s [y/n] ? ") % author).upper()))
 
             # Add abstract if desired
-            if AddAbstract: self.AddAbstract(id, abstract, Verbose=True)
+            if AddAbstract: self.AddAbstract(id, title, abstract, Verbose=True)
 
         # Sort so that most recent paper comes first
         self.SortDescending()
 
-    def UpdateCorpus(self, ncorpus, nabs_per_iter=100, wait_time=3):
+    def UpdateSubmissions(self, nmax, nabs_per_iter=100, wait_time=3):
         """
-        Update corpus so that it contains the ncorpus most recent abstracts in the arxiv category.
+        Update collection so that it contains the most recent arxiv abstracts, up to some maximum number.
         """
 
         #
@@ -118,7 +119,7 @@ class Abstracts:
         # Keep track of how many new abstracts have been added
         nadd = 0
 
-        for i in range(0, ncorpus, nabs_per_iter):
+        for i in range(0, nmax, nabs_per_iter):
 
             # Query the arXiv API for search results within specifix document range
             url = url_template % (i, nabs_per_iter)
@@ -132,7 +133,7 @@ class Abstracts:
                 if self.CheckID(id):
                     StopSearch = True
                     break
-                self.AddAbstract(id, abstract, Verbose=False)
+                self.AddAbstract(id, title, abstract, Verbose=False)
                 nadd += 1
             if StopSearch: break
 
@@ -140,28 +141,32 @@ class Abstracts:
             time.sleep(wait_time)
 
         #
-        # Trim so that only the ncorpus most recent abstracts are included 
+        # Trim so that only the most recent abstracts are included 
         #
 
-        self.TrimCollection(ncorpus)
-
+        nkeep = min(nadd, nmax)
+        if nkeep > 0:
+            self.TrimCollection(nkeep)
+        else:
+            print("NO NEW SUBMISSIONS TO RANK")
+            exit()
+    
         #
         # Print some info to screen
         #
 
         print()
-        print("Corpus contains %i abstracts" % self.collection.shape[0])
-        print("Abstracts added now : %s" % nadd)
+        print("Collection contains %i submissions" % self.collection.shape[0])
         print("Newest arxiv id     : %s" % self.collection[self.id].iloc[0])
         print("Oldest arxiv id     : %s" % self.collection[self.id].iloc[-1])
         print()
 
-    def AddAbstract(self, id, abstract, Verbose=False):
+    def AddAbstract(self, id, title, abstract, Verbose=False):
         """
         Add the provided abstract to the dataframe.
         """
 
-        self.collection = self.collection.append({self.id:id, self.abstract:abstract}, ignore_index=True)
+        self.collection = self.collection.append({self.id:id, self.title:title, self.abstract:abstract}, ignore_index=True)
         if Verbose: print("Added abstract with id : %s" % id)
 
     def CheckID(self, id):
@@ -218,6 +223,13 @@ class Abstracts:
         if userinput.lower() == "y" or userinput.lower() == "yes": keep = True
 
         return keep
+
+    def DropTokens(self):
+        """
+        Remove tokenized text from the dataframe.
+        """
+
+        self.collection.drop(columns=self.cleaned, inplace=True)
 
     def Save(self):
         """
@@ -287,11 +299,9 @@ class Abstracts:
             for w in words: cleaned_text += w + " "
             row[self.cleaned] = cleaned_text
 
-        print("Cleaned and tokenized abstracts")
-
     def ComputeTfidfWeights(self):
         """
-        Compute TF-IDF weights using the cleaned and tokenized abstracts.
+        Compute tf-idf weights using the cleaned and tokenized abstracts.
         """
 
         # Store cleaned text as a list 
@@ -306,4 +316,54 @@ class Abstracts:
         weights.reset_index(drop=True, inplace=True)
     
         return weights
+
+    def FitVectorizer(self):
+        """
+        Fit tf-idf vectorizer to the preprocessed abstract text.
+        """    
+
+        # Store cleaned text as a list 
+        doc_text = [ ]
+        for index, row in self.collection.iterrows(): doc_text.append(row[self.cleaned])
+
+        # Fit vectorizer to the text
+        vectorizer = TfidfVectorizer(ngram_range=(1,2), norm="l2")
+        vectorizer.fit(doc_text)
+
+        return vectorizer
+
+    def RunVectorizer(self, vectorizer):
+        """
+        Transform preprocessed abstract text using the vectorizer fit in FitVectorizer()
+        """
+
+        # Store cleaned text as a list 
+        doc_text = [ ]
+        for index, row in self.collection.iterrows(): doc_text.append(row[self.cleaned])
+
+        # Transform this using the tf-idf vectorizer fit previously
+        tfidf_vectors = vectorizer.transform(doc_text)
+
+        return tfidf_vectors
+
+    def GetTitles(self): 
+        """
+        Return titles of each abstract in the collection.
+        """
+
+        return self.collection[self.title]
+
+    def GetIDs(self):
+        """
+        Return IDs of each abstract in the collection.
+        """
+    
+        return self.collection[self.id]
+
+    def GetAbstracts(self):
+        """
+        Return each of the abstracts in the collection.
+        """
+
+        return self.collection[self.abstract]
 
