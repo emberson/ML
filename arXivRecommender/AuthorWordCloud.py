@@ -1,12 +1,11 @@
 import numpy as np
+import pandas as pd
 from Abstracts import Abstracts
 from wordcloud import WordCloud
 import matplotlib
 matplotlib.use("PDF")
 import pylab
 import os
-
-import pandas as pd
 
 # -------------------------------------------------------------------------------------------------------
 # PARAMETERS
@@ -22,6 +21,13 @@ input_file_temp = input_dir + "author-%s-ids.dat"
 # Output plot containing the word cloud
 plot_dir       = "plots/"
 plot_file_temp = plot_dir + "wordcloud-%s.pdf"
+
+# Output file storing the tf-idf weights
+output_dir       = "data/"
+output_file_temp = output_dir + "author-%s-tfidf.dat" 
+
+# Flag to read from a previously stored tf-idf database (may be useful for fine tuning)
+READ_SCORES = False
 
 # Path to non-default font if do not want to use wordcloud default
 font_path = "path/to/nonstandard/font.ttf"
@@ -80,6 +86,28 @@ def ReadPalette(data_file, N=256):
     cmap = matplotlib.colors.LinearSegmentedColormap("colormap", cdict, N)
 
     return cmap
+
+def SaveScores(df, db):
+    """
+    Save score database to a CSV file.
+    """
+
+    db.to_csv(df, sep="\t")
+
+    print("Scores saved to " + df)
+
+def ReadScores(df):
+    """
+    Returns scores from a CSV file.
+    """
+
+    try:
+        db = pd.read_csv(df, index_col=0, sep="\t")
+    except:
+        print("ERROR: Could not read scores from", df)
+        exit()
+
+    return db
 
 def PlotWordCloud(pf, w, font_path, cmap_path, cmap="jet", max_terms=64):
     """
@@ -150,14 +178,30 @@ if not os.path.isdir(plot_dir): os.makedirs(plot_dir)
 
 for author in authors:
 
-    # Read author abstracts
-    documents = Abstracts(input_file_temp % author) 
+    #
+    # Either run the analysis or if READ_SCORES then read in a previously created tf-idf database
+    # The latter can be useful for adjusting the results to make them more domain appropriate
+    # (e.g., in my case "cold" and "cold dark matter" ranked similarly and the more relevant term
+    # in cosmology is the latter so I deleted the former from the database to remove redundancy)
+    #
 
-    # Clean text and tokenize
-    documents.TokenizeAbstracts()
+    if READ_SCORES:
 
-    # Compute TF-IDF weights on the tokenized text 
-    tfidf = documents.ComputeTfidfWeights()
+        tfidf = ReadScores(output_file_temp % author)
+
+    else:
+
+        # Read author abstracts
+        documents = Abstracts(input_file_temp % author) 
+
+        # Clean text and tokenize
+        documents.TokenizeAbstracts()
+
+        # Compute TF-IDF weights on the tokenized text 
+        tfidf = documents.ComputeTfidfWeights()
+
+        # Save these to a file
+        SaveScores(output_file_temp % author, tfidf)
 
     # Plot the word cloud
     PlotWordCloud(plot_file_temp % author, tfidf, font_path, cmap_path)
